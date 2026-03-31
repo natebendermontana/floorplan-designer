@@ -1137,18 +1137,14 @@ function rebuild3d(){
       m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;m.userData.fp=true;scene3.add(m);
 
     } else if(el.type==='door'){
-      // The 2D door angle is the swing direction. The wall it sits in runs perpendicular
-      // to that, so we add PI/2 to get the wall-parallel angle for the door panel.
-      const doorLen = (el.len||PX_PER_FT*3)/PX_PER_FT;
-      const doorH   = wallH * 0.88;
-      const wallThk = 0.25;
-      const panelThk = 0.08;
+      // wallAng: door swing angle is perpendicular to the wall, so add PI/2
+      const doorLen  = (el.len||PX_PER_FT*3)/PX_PER_FT;
+      const doorH    = wallH * 0.88;
+      const wallThk  = 0.80;   // match window glassD so panel pierces both wall faces
+      const panelThk = wallThk; // panel same depth as wall so visible from both sides
       const dx3 = el.x/PX_PER_FT-cx, dz3 = el.y/PX_PER_FT-cz;
+      const wallAng  = -(el.angle||0) - Math.PI/2;
 
-      // Wall-parallel angle: door swing angle + 90deg
-      const wallAng = -(el.angle||0) - Math.PI/2;
-
-      // Use a Group so all parts rotate together around the door's origin
       const dGroup = new THREE.Group();
       dGroup.position.set(dx3, yBase, dz3);
       dGroup.rotation.y = wallAng;
@@ -1157,45 +1153,60 @@ function rebuild3d(){
 
       const doorMat  = new THREE.MeshLambertMaterial({color:0x7a5438, side:THREE.DoubleSide});
       const frameMat = new THREE.MeshLambertMaterial({color:0x9a8060, side:THREE.DoubleSide});
+      const wallFill = new THREE.MeshLambertMaterial({color:0xcecac0, side:THREE.DoubleSide});
 
-      // Door panel — centred at doorLen/2 from hinge (left jamb at 0)
+      // ── Door panel: full wall thickness so visible from both sides ──
       const dp = new THREE.Mesh(new THREE.BoxGeometry(doorLen, doorH, panelThk), doorMat);
       dp.position.set(doorLen/2, doorH/2, 0);
       dp.castShadow = true;
+      dp.renderOrder = 1;
       dGroup.add(dp);
 
-      // Door panel detail lines (recessed panels) — just two smaller inset boxes
+      // Recessed panel details (on front face only, offset forward)
       const inset = new THREE.MeshLambertMaterial({color:0x5a3c22, side:THREE.DoubleSide});
-      [[doorLen*0.15, doorH*0.55, doorLen*0.7, doorH*0.35],
-       [doorLen*0.15, doorH*0.08, doorLen*0.7, doorH*0.25]].forEach(([px,py,pw,ph])=>{
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(pw,ph,panelThk*0.4),inset);
-        panel.position.set(px+pw/2-doorLen/2+doorLen/2, py+ph/2, panelThk*0.3);
+      [[doorLen*0.12, doorH*0.55, doorLen*0.76, doorH*0.34],
+       [doorLen*0.12, doorH*0.08, doorLen*0.76, doorH*0.28]].forEach(([px,py,pw,ph])=>{
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.04), inset);
+        panel.position.set(px + pw/2 - doorLen/2, py + ph/2 - doorH/2, panelThk/2 + 0.01);
         dp.add(panel);
+        // mirror on back face
+        const panelB = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.04), inset);
+        panelB.position.set(px + pw/2 - doorLen/2, py + ph/2 - doorH/2, -(panelThk/2 + 0.01));
+        dp.add(panelB);
       });
 
-      // Top frame header
-      const header = new THREE.Mesh(new THREE.BoxGeometry(doorLen+0.18, 0.14, wallThk), frameMat);
-      header.position.set(doorLen/2, doorH+0.07, 0);
+      // ── Wall infill ABOVE door (covers the gap between door top and ceiling) ──
+      // This is the wall-coloured block that fills the transom space
+      const aboveH = wallH - doorH;
+      if(aboveH > 0.05){
+        const above = new THREE.Mesh(
+          new THREE.BoxGeometry(doorLen, aboveH, panelThk), wallFill
+        );
+        above.position.set(doorLen/2, doorH + aboveH/2, 0);
+        above.renderOrder = 1;
+        dGroup.add(above);
+      }
+
+      // ── Frame: jambs and header, slightly wider/taller than panel ──
+      const jambW = 0.12;
+      [0, doorLen].forEach(jx=>{
+        const jamb = new THREE.Mesh(new THREE.BoxGeometry(jambW, wallH, panelThk + 0.04), frameMat);
+        jamb.position.set(jx, wallH/2, 0);
+        jamb.renderOrder = 1;
+        dGroup.add(jamb);
+      });
+      const header = new THREE.Mesh(new THREE.BoxGeometry(doorLen + jambW*2, 0.14, panelThk + 0.04), frameMat);
+      header.position.set(doorLen/2, doorH + 0.07, 0);
+      header.renderOrder = 1;
       dGroup.add(header);
 
-      // Left jamb (hinge side, at x=0)
-      const jambL = new THREE.Mesh(new THREE.BoxGeometry(0.12, doorH+0.14, wallThk), frameMat);
-      jambL.position.set(0, (doorH+0.14)/2, 0);
-      dGroup.add(jambL);
-
-      // Right jamb (latch side, at x=doorLen)
-      const jambR = new THREE.Mesh(new THREE.BoxGeometry(0.12, doorH+0.14, wallThk), frameMat);
-      jambR.position.set(doorLen, (doorH+0.14)/2, 0);
-      dGroup.add(jambR);
-
-      // Door knob
+      // ── Knob (both sides) ──
       const knobMat = new THREE.MeshLambertMaterial({color:0xd4af37});
-      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), knobMat);
-      knob.position.set(doorLen*0.82, doorH*0.45, panelThk*0.6);
-      dGroup.add(knob);
-      const knobBack = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), knobMat);
-      knobBack.position.set(doorLen*0.82, doorH*0.45, -panelThk*0.6);
-      dGroup.add(knobBack);
+      [panelThk/2 + 0.06, -(panelThk/2 + 0.06)].forEach(kz=>{
+        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), knobMat);
+        knob.position.set(doorLen * 0.82, doorH * 0.45, kz);
+        dGroup.add(knob);
+      });
 
     } else if(el.type==='window'){
       // Window: glass is thick enough to pierce both wall faces — visible inside & out
