@@ -27,8 +27,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 .tb-btn.active { background:var(--bg2); border-color:var(--accent); color:var(--accent); }
 .tb-btn svg { width:13px; height:13px; }
 .tb-sep { width:0.5px; height:20px; background:var(--border); margin:0 2px; flex-shrink:0; }
-#area-badge { font-size:12px; color:var(--text2); background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:4px 10px; white-space:nowrap; flex-shrink:0; }
-#area-badge strong { color:var(--text); font-weight:500; }
 #main { display:flex; flex:1; overflow:hidden; }
 #sidebar { width:186px; flex-shrink:0; background:var(--bg); border-right:0.5px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
 .sb-section { padding:9px; border-bottom:0.5px solid var(--border); }
@@ -93,8 +91,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="tb-btn" id="btn-export-dxf"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 6h6M5 8h4M5 10h5"/></svg>DXF</button>
   <div class="tb-sep"></div>
   <button class="tb-btn" id="btn-toggle-3d"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3.5v5L8 14l-6-3.5v-5z"/><path d="M8 2v12M2 5.5l6 3.5 6-3.5"/></svg>3D View</button>
-  <div class="tb-sep"></div>
-  <div id="area-badge">Total: <strong id="total-area">0</strong> sq ft</div>
+
 </div>
 <div id="main">
   <div id="sidebar">
@@ -846,7 +843,6 @@ function updateAreas() {
   const gRooms=rooms.filter(r=>(r.floor||0)===0), uRooms=rooms.filter(r=>(r.floor||0)===1);
   const gTotal=gRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0);
   const uTotal=uRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0);
-  document.getElementById('total-area').textContent=(gTotal+uTotal).toFixed(1);
   const list=document.getElementById('area-list');
   if(!rooms.length){list.innerHTML='<span style="color:var(--text3)">No rooms yet</span>';return;}
   let html='';
@@ -1127,9 +1123,11 @@ function rebuild3d(){
         m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;m.userData.fp=true;scene3.add(m);
       });
 
-      // Label sprite
-      const sp=makeSprite(el.label||'',`${(rw*rh).toFixed(0)} ft\u00b2`,col);
-      sp.position.set(rx+rw/2,yBase+wallH+1.2,rz+rh/2);sp.userData.fp=true;scene3.add(sp);
+      // Label sprite (room name only, no sq ft)
+      if(el.label){
+        const sp=makeSprite(el.label,'',col);
+        sp.position.set(rx+rw/2,yBase+wallH+1.0,rz+rh/2);sp.userData.fp=true;scene3.add(sp);
+      }
 
     } else if(el.type==='wall'){
       const x1=el.x1/PX_PER_FT-cx,z1=el.y1/PX_PER_FT-cz,x2=el.x2/PX_PER_FT-cx,z2=el.y2/PX_PER_FT-cz;
@@ -1181,12 +1179,12 @@ function rebuild3d(){
       const wx3 = el.x/PX_PER_FT-cx, wz3 = el.y/PX_PER_FT-cz;
       const wAng = -(el.angle||0);
       // Glass (double-sided so visible from inside and outside)
-      const glassMat = new THREE.MeshLambertMaterial({color:0xa8d8f0,transparent:true,opacity:0.38,side:THREE.DoubleSide});
+      const glassMat = new THREE.MeshBasicMaterial({color:0xa8d8f0,transparent:true,opacity:0.42,side:THREE.DoubleSide,depthWrite:false});
       const glass = new THREE.Mesh(new THREE.BoxGeometry(winLen,winH,wallThk*0.5),glassMat);
       glass.position.set(wx3,yBase+sillH+winH/2,wz3);
       glass.rotation.y=wAng;glass.userData.fp=true;scene3.add(glass);
       // Frame pieces
-      const fMat = new THREE.MeshLambertMaterial({color:0xe8e4da,side:THREE.DoubleSide});
+      const fMat = new THREE.MeshBasicMaterial({color:0xe0ddd5,side:THREE.DoubleSide});
       const fr = wallThk*0.55;
       // Top and bottom rails
       [{oy:winH/2},{oy:-winH/2}].forEach(({oy})=>{
