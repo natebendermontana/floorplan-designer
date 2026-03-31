@@ -893,12 +893,18 @@ function initThree(){
   if(threeReady)return; threeReady=true;
   const c=document.getElementById('three-canvas');
   renderer3=new THREE.WebGLRenderer({canvas:c,antialias:true});
-  renderer3.setPixelRatio(devicePixelRatio); renderer3.setClearColor(0x12121f,1); renderer3.shadowMap.enabled=true;
-  scene3=new THREE.Scene(); scene3.fog=new THREE.Fog(0x12121f,60,200);
-  camera3=new THREE.PerspectiveCamera(50,1,0.1,1000); updateCam3();
+  renderer3.setPixelRatio(devicePixelRatio);
+  renderer3.setClearColor(0x12121f,1);
+  renderer3.shadowMap.enabled=true;
+  scene3=new THREE.Scene();
+  scene3.fog=new THREE.Fog(0x12121f,60,200);
+  camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
+  updateCam3();
   scene3.add(new THREE.AmbientLight(0xffffff,0.5));
-  const sun=new THREE.DirectionalLight(0xfff8e8,0.95); sun.position.set(25,45,20); sun.castShadow=true; scene3.add(sun);
-  scene3.add(Object.assign(new THREE.DirectionalLight(0xc8d8ff,0.28),{position:new THREE.Vector3(-18,12,-12)}));
+  const sun=new THREE.DirectionalLight(0xfff8e8,0.95);
+  sun.position.set(25,45,20); sun.castShadow=true; scene3.add(sun);
+  const fill=new THREE.DirectionalLight(0xc8d8ff,0.28);
+  fill.position.set(-18,12,-12); scene3.add(fill);
   let orbiting=false, lastM={x:0,y:0};
   c.addEventListener('mousedown',e=>{orbiting=true;lastM={x:e.clientX,y:e.clientY};e.stopPropagation();});
   window.addEventListener('mouseup',()=>orbiting=false);
@@ -909,7 +915,13 @@ function initThree(){
     lastM={x:e.clientX,y:e.clientY}; updateCam3();
   });
   c.addEventListener('wheel',e=>{spherical.radius=Math.max(4,Math.min(130,spherical.radius+e.deltaY*0.05));updateCam3();e.preventDefault();},{passive:false});
-  (function animate(){requestAnimationFrame(animate);const panel=document.getElementById('panel-3d');const cw=panel.clientWidth,ch=panel.clientHeight-36-40;if(cw>0&&ch>0&&Math.abs(c.width-cw*devicePixelRatio)>1){renderer3.setSize(cw,ch);camera3.aspect=cw/ch;camera3.updateProjectionMatrix();}renderer3.render(scene3,camera3);})();
+  function syncSize(){
+    const panel=document.getElementById('panel-3d');
+    const cw=panel.clientWidth, ch=Math.max(1,panel.clientHeight-76);
+    if(cw>10&&ch>10){ renderer3.setSize(cw,ch); camera3.aspect=cw/ch; camera3.updateProjectionMatrix(); }
+  }
+  syncSize();
+  (function animate(){ requestAnimationFrame(animate); syncSize(); renderer3.render(scene3,camera3); })();
 }
 
 function updateCam3(){
