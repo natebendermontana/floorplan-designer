@@ -57,11 +57,16 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 #statusbar { position:absolute; bottom:0; left:0; right:0; height:26px; background:var(--bg); border-top:0.5px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:16px; font-size:11px; color:var(--text2); pointer-events:none; }
 #statusbar span { white-space:nowrap; }
 #st-hint { margin-left:auto; }
-#panel-3d { width:0; flex-shrink:0; background:#12121f; border-left:0.5px solid var(--border); display:flex; flex-direction:column; overflow:hidden; transition:width 0.25s ease; }
+#panel-3d { width:0; flex-shrink:0; background:#12121f; border-left:0.5px solid var(--border); display:flex; flex-direction:column; overflow:hidden; transition:none; position:relative; }
 #panel-3d.open { width:420px; }
-#panel-3d-header { height:36px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; border-bottom:0.5px solid rgba(255,255,255,0.08); flex-shrink:0; }
+#panel-3d.fullscreen { position:fixed; inset:0; width:100vw !important; height:100vh !important; z-index:1000; border:none; }
+#panel-3d-resizer { position:absolute; left:0; top:0; bottom:0; width:5px; cursor:ew-resize; background:transparent; z-index:10; }
+#panel-3d-resizer:hover, #panel-3d-resizer.dragging { background:rgba(59,130,246,0.5); }
+#panel-3d-header { height:36px; display:flex; align-items:center; justify-content:space-between; padding:0 8px 0 14px; border-bottom:0.5px solid rgba(255,255,255,0.08); flex-shrink:0; gap:6px; }
 #panel-3d-header .ph-title { font-size:12px; color:rgba(255,255,255,0.65); font-weight:500; }
-#panel-3d-header .ph-hint { font-size:11px; color:rgba(255,255,255,0.3); }
+#panel-3d-header .ph-hint { font-size:11px; color:rgba(255,255,255,0.3); flex:1; }
+.ph-btn { padding:3px 7px; border:0.5px solid rgba(255,255,255,0.2); border-radius:5px; background:transparent; color:rgba(255,255,255,0.5); font-size:11px; cursor:pointer; white-space:nowrap; }
+.ph-btn:hover { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.85); }
 #three-canvas { flex:1; display:block; width:100%; }
 #panel-3d-footer { padding:7px 10px; border-top:0.5px solid rgba(255,255,255,0.08); display:flex; align-items:center; gap:8px; flex-shrink:0; }
 #panel-3d-footer label { font-size:11px; color:rgba(255,255,255,0.4); white-space:nowrap; }
@@ -149,9 +154,13 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       </div>
     </div>
     <div id="panel-3d">
+      <div id="panel-3d-resizer"></div>
       <div id="panel-3d-header">
         <span class="ph-title">3D Preview</span>
         <span class="ph-hint">Drag to orbit · scroll to zoom</span>
+        <button class="ph-btn" id="btn-3d-wider" title="Wider">&#x2190;&#x2192;</button>
+        <button class="ph-btn" id="btn-3d-narrower" title="Narrower">&#x2192;&#x2190;</button>
+        <button class="ph-btn" id="btn-3d-fullscreen" title="Fullscreen">&#x26F6;</button>
       </div>
       <canvas id="three-canvas"></canvas>
       <div id="panel-3d-footer">
@@ -770,12 +779,75 @@ let renderer3, scene3, camera3, spherical={theta:Math.PI/4,phi:Math.PI/3,radius:
 const ROOM_COLORS=[0x4a90d9,0x50c878,0xe8a838,0xd95c5c,0x9b59b6,0x1abc9c,0xe67e22,0x3498db];
 const FUR_COLORS={bed:0x7a5c4a,sofa:0x4a5c7a,table:0x6a5035,toilet:0xd8d8d8,bathtub:0xd0d0e8};
 
+// Panel width state
+let panel3dWidth = 420;
+
 document.getElementById('btn-toggle-3d').addEventListener('click',()=>{
   panel3dOpen=!panel3dOpen;
-  document.getElementById('panel-3d').classList.toggle('open',panel3dOpen);
+  const panel=document.getElementById('panel-3d');
+  if(panel3dOpen){
+    panel.classList.add('open');
+    panel.style.width=panel3dWidth+'px';
+    setTimeout(()=>{initThree();rebuild3d();resize();},30);
+  } else {
+    panel.classList.remove('open');
+    panel.style.width='0';
+  }
   document.getElementById('btn-toggle-3d').classList.toggle('active',panel3dOpen);
-  if(panel3dOpen)setTimeout(()=>{initThree();rebuild3d();resize();},260);
 });
+
+// Wider / Narrower buttons
+document.getElementById('btn-3d-wider').addEventListener('click',()=>{
+  panel3dWidth=Math.min(window.innerWidth-300, panel3dWidth+120);
+  document.getElementById('panel-3d').style.width=panel3dWidth+'px';
+});
+document.getElementById('btn-3d-narrower').addEventListener('click',()=>{
+  panel3dWidth=Math.max(260, panel3dWidth-120);
+  document.getElementById('panel-3d').style.width=panel3dWidth+'px';
+});
+
+// Fullscreen toggle
+let is3dFullscreen=false;
+document.getElementById('btn-3d-fullscreen').addEventListener('click',()=>{
+  is3dFullscreen=!is3dFullscreen;
+  const panel=document.getElementById('panel-3d');
+  const btn=document.getElementById('btn-3d-fullscreen');
+  panel.classList.toggle('fullscreen',is3dFullscreen);
+  btn.innerHTML=is3dFullscreen?'&#x2715;':'&#x26F6;';
+  btn.title=is3dFullscreen?'Exit fullscreen':'Fullscreen';
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&is3dFullscreen){
+    is3dFullscreen=false;
+    document.getElementById('panel-3d').classList.remove('fullscreen');
+    document.getElementById('btn-3d-fullscreen').innerHTML='&#x26F6;';
+  }
+},true);
+
+// Drag resizer
+(()=>{
+  const resizer=document.getElementById('panel-3d-resizer');
+  let dragging=false, startX=0, startW=0;
+  resizer.addEventListener('mousedown',e=>{
+    dragging=true; startX=e.clientX;
+    startW=document.getElementById('panel-3d').clientWidth;
+    resizer.classList.add('dragging');
+    document.body.style.cursor='ew-resize';
+    document.body.style.userSelect='none';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!dragging)return;
+    const delta=startX-e.clientX; // drag left = make wider
+    panel3dWidth=Math.max(260,Math.min(window.innerWidth-300, startW+delta));
+    document.getElementById('panel-3d').style.width=panel3dWidth+'px';
+  });
+  window.addEventListener('mouseup',()=>{
+    if(!dragging)return;
+    dragging=false; resizer.classList.remove('dragging');
+    document.body.style.cursor=''; document.body.style.userSelect='';
+  });
+})();
 document.getElementById('wall-height-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
 
 function initThree(){
@@ -800,7 +872,7 @@ function initThree(){
   window.addEventListener('mousemove',e=>{
     if(!orbiting)return;
     spherical.theta-=(e.clientX-lastM.x)*0.008;
-    spherical.phi=Math.max(0.12,Math.min(Math.PI/2-0.04,spherical.phi+(e.clientY-lastM.y)*0.008));
+    spherical.phi=Math.max(0.12,Math.min(Math.PI/2-0.04,spherical.phi-(e.clientY-lastM.y)*0.008));
     lastM={x:e.clientX,y:e.clientY};updateCam3();
   });
   c.addEventListener('wheel',e=>{spherical.radius=Math.max(4,Math.min(130,spherical.radius+e.deltaY*0.05));updateCam3();e.preventDefault();},{passive:false});
