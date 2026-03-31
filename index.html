@@ -105,6 +105,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <button class="tool-btn active" data-tool="select"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l5 13 2-5 5-2z"/></svg>Select</button>
       <button class="tool-btn" data-tool="lasso"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 13C3.3 11.8 2 10 2 8c0-3.3 3.1-6 7-6s7 2.7 7 6-3.1 6-7 6c-.7 0-1.4-.1-2-.3L5 16z"/></svg>Lasso</button>
       <button class="tool-btn" data-tool="wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="5" x2="2" y2="13"/><line x1="16" y1="5" x2="16" y2="13"/></svg>Wall</button>
+      <button class="tool-btn" data-tool="half-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="16" y2="12"/><line x1="2" y1="8" x2="2" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><line x1="2" y1="8" x2="16" y2="8" stroke-dasharray="2 2"/></svg>Half-wall</button>
       <button class="tool-btn" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
     </div>
     <div class="sb-section">
@@ -422,9 +423,16 @@ function floorStrokeColor(el, selColor, normalDark, normalLight) {
 function drawWall(el, sel) {
   const dark=isDark(), alpha=floorAlpha(el);
   ctx.globalAlpha=alpha;
-  ctx.strokeStyle=sel?'#3B82F6':((el.floor||0)!==currentFloor?(dark?'rgba(150,180,255,0.7)':'rgba(80,120,220,0.6)'):(dark?'#d8d7ce':'#2C2C2A'));
-  ctx.lineWidth=el.thickness||8; ctx.lineCap='round';
+  const wallColor=sel?'#3B82F6':((el.floor||0)!==currentFloor?(dark?'rgba(150,180,255,0.7)':'rgba(80,120,220,0.6)'):(dark?'#d8d7ce':'#2C2C2A'));
+  ctx.strokeStyle=wallColor; ctx.lineWidth=el.thickness||8; ctx.lineCap='round';
   ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
+  // Half-walls: overlay a dashed centre line in a lighter tone
+  if (el.half) {
+    ctx.strokeStyle=sel?'#93C5FD':(dark?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.7)');
+    ctx.lineWidth=2; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (alpha > 0.5) dimLabel(el.x1,el.y1,el.x2,el.y2);
   ctx.globalAlpha=1;
   if (sel) drawHandles(el);
@@ -796,7 +804,7 @@ canvas2d.addEventListener('mousemove',e=>{
 canvas2d.addEventListener('mousedown',e=>{
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='lasso'){lassoActive=true;lassoPath=[{x,y}];return;}
-  if(tool==='wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
+  if(tool==='wall'||tool==='half-wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
   if(tool==='window'||tool==='door'){
     saveHistory();elements.push({type:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(tool==='window'?4:3),angle:0,floor:currentFloor});render2d();return;
   }
@@ -821,9 +829,9 @@ canvas2d.addEventListener('mouseup',e=>{
   if(dragEl){dragEl=null;dragStart=null;dragMultiOrigins=null;saveHistory();return;}
   if(!drawing)return;
   const sp=snapPt(x,y);
-  if(tool==='wall'){
+  if(tool==='wall'||tool==='half-wall'){
     if(Math.hypot(sp.x-previewStart.x,sp.y-previewStart.y)>4){
-      saveHistory();elements.push({type:'wall',x1:previewStart.x,y1:previewStart.y,x2:sp.x,y2:sp.y,thickness:8,floor:currentFloor});
+      saveHistory();elements.push({type:'wall',x1:previewStart.x,y1:previewStart.y,x2:sp.x,y2:sp.y,thickness:8,floor:currentFloor,half:tool==='half-wall'});
     }
   } else if(tool==='room'){
     const rw=Math.abs(sp.x-previewStart.x),rh=Math.abs(sp.y-previewStart.y);
@@ -868,7 +876,7 @@ function updateProps() {
   const inp=(id,type,value,extra='')=>`<input class="prop-input" id="${id}" type="${type}" value="${value}" ${extra}>`;
   const sel2=(id,opts,cur)=>`<select class="prop-input" id="${id}">${opts.map(([v,l])=>`<option value="${v}"${v==cur?' selected':''}>${l}</option>`).join('')}</select>`;
   let html='';
-  if(el.type==='wall'){html+=row('Type',val('Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));}
+  if(el.type==='wall'){html+=row('Type',val(el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);}
   else if(el.type==='room'){html+=row('Type',val('Room'));html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));html+=row('Height',val(`${(el.h/PX_PER_FT).toFixed(2)} ft`));html+=row('Area',val(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft\u00b2`));html+=row('Label',inp('pe-label','text',el.label||''));}
   else if(el.type==='window'||el.type==='door'){html+=row('Type',val(el.type==='window'?'Window':'Door'));html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="1" max="20" step="0.5"'));html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));}
   else if(el.type==='furniture'){html+=row('Type',val(FDEFS[el.ftype]?.label||el.ftype));html+=row('Width (ft)',inp('pe-fw','number',el.fw,'min="1" max="30" step="0.5"'));html+=row('Depth (ft)',inp('pe-fh','number',el.fh,'min="1" max="30" step="0.5"'));html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));}
@@ -877,6 +885,7 @@ function updateProps() {
   pane.innerHTML=html;
   const bind=(id,fn)=>{const e2=document.getElementById(id);if(e2)e2.addEventListener('input',fn);};
   bind('pe-thick',e=>{el.thickness=parseInt(e.target.value)||8;render2d();});
+  bind('pe-half',e=>{el.half=e.target.value==='1';render2d();});
   bind('pe-len',e=>{el.len=parseFloat(e.target.value)*PX_PER_FT;render2d();});
   bind('pe-fw',e=>{el.fw=parseFloat(e.target.value)||1;render2d();});
   bind('pe-fh',e=>{el.fh=parseFloat(e.target.value)||1;render2d();});
@@ -889,7 +898,7 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall',room:'Click + drag to draw a room',window:'Click to place',door:'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall',room:'Click + drag to draw a room',window:'Click to place',door:'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 document.querySelectorAll('.tool-btn[data-tool]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     tool=btn.dataset.tool;
@@ -929,7 +938,7 @@ document.addEventListener('keydown',e=>{
     else if(selected){saveHistory();elements=elements.filter(x=>x!==selected);selected=null;updateProps();render2d();}
   }
   if(e.key==='Escape'){selected=null;multiSel=[];updateProps();render2d();}
-  const keys={v:'select',l:'lasso',w:'wall',r:'room',n:'window',d:'door'};
+  const keys={v:'select',l:'lasso',w:'wall',h:'half-wall',r:'room',n:'window',d:'door'};
   if(keys[e.key])document.querySelector(`[data-tool="${keys[e.key]}"]`).click();
 });
 
@@ -961,7 +970,7 @@ document.getElementById('btn-export-dxf').addEventListener('click',()=>{
 // THREE.JS 3D PREVIEW
 // ══════════════════════════════════════════════════
 let panel3dOpen=false, threeReady=false;
-let renderer3, scene3, camera3, spherical={theta:Math.PI/4,phi:Math.PI/3,radius:35};
+let renderer3, scene3, camera3, spherical={theta:Math.PI/4,phi:Math.PI/3,radius:35,tx:0,ty:0,tz:0};
 const ROOM_COLORS=[0x4a90d9,0x50c878,0xe8a838,0xd95c5c,0x9b59b6,0x1abc9c,0xe67e22,0x3498db];
 const FUR_COLORS={}; // colors now handled per-ftype in furProps inside rebuild3d
 
@@ -1008,6 +1017,17 @@ document.addEventListener('keydown',e=>{
     document.getElementById('panel-3d').classList.remove('fullscreen');
     document.getElementById('btn-3d-fullscreen').innerHTML='&#x26F6;';
   }
+  // Arrow keys: pan the 3D camera target when panel is open and no input is focused
+  if(!panel3dOpen) return;
+  if(document.activeElement&&['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  const PAN=0.6, VERT=0.4;
+  // Compute right/forward vectors from current theta so left/right pan is screen-relative
+  const cosT=Math.cos(spherical.theta), sinT=Math.sin(spherical.theta);
+  if(e.key==='ArrowLeft')  { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; e.preventDefault(); }
+  if(e.key==='ArrowRight') { spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; e.preventDefault(); }
+  if(e.key==='ArrowUp')    { spherical.ty+=VERT; e.preventDefault(); }
+  if(e.key==='ArrowDown')  { spherical.ty-=VERT; e.preventDefault(); }
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown') updateCam3();
 },true);
 
 // Drag resizer
@@ -1074,11 +1094,11 @@ function initThree(){
 function updateCam3(){
   if(!camera3)return;
   camera3.position.set(
-    spherical.radius*Math.sin(spherical.phi)*Math.sin(spherical.theta),
-    spherical.radius*Math.cos(spherical.phi),
-    spherical.radius*Math.sin(spherical.phi)*Math.cos(spherical.theta)
+    spherical.tx + spherical.radius*Math.sin(spherical.phi)*Math.sin(spherical.theta),
+    spherical.ty + spherical.radius*Math.cos(spherical.phi),
+    spherical.tz + spherical.radius*Math.sin(spherical.phi)*Math.cos(spherical.theta)
   );
-  camera3.lookAt(0,0,0);
+  camera3.lookAt(spherical.tx, spherical.ty, spherical.tz);
 }
 
 function rebuild3d(){
@@ -1132,8 +1152,10 @@ function rebuild3d(){
     } else if(el.type==='wall'){
       const x1=el.x1/PX_PER_FT-cx,z1=el.y1/PX_PER_FT-cz,x2=el.x2/PX_PER_FT-cx,z2=el.y2/PX_PER_FT-cz;
       const len=Math.hypot(x2-x1,z2-z1); if(len<0.05)continue;
-      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wallH,0.25),new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0,side:THREE.DoubleSide}));
-      m.position.set((x1+x2)/2,yBase+wallH/2,(z1+z2)/2);
+      const wh3d = el.half ? wallH*0.5 : wallH; // half-walls are 50% height
+      const wCol = el.half ? (fl===0?0xd8c8a0:0xc8d8e8) : (fl===0?0xcecac0:0xb8d4f0);
+      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,0.25),new THREE.MeshLambertMaterial({color:wCol,side:THREE.DoubleSide}));
+      m.position.set((x1+x2)/2,yBase+wh3d/2,(z1+z2)/2);
       m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;m.userData.fp=true;scene3.add(m);
 
     } else if(el.type==='door'){
