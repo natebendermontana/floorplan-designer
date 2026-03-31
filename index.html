@@ -1115,8 +1115,8 @@ function rebuild3d(){
       fm.position.set(rx+rw/2,yBase-FLOOR_SEP/2,rz+rh/2);fm.userData.fp=true;scene3.add(fm);
 
       // Four walls
-      const wMat=new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0});
-      const wt=0.2;
+      const wMat=new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0,side:THREE.DoubleSide});
+      const wt=0.25;
       [{w:rw,d:wt,x:rx+rw/2,z:rz+wt/2},{w:rw,d:wt,x:rx+rw/2,z:rz+rh-wt/2},
        {w:wt,d:rh,x:rx+wt/2,z:rz+rh/2},{w:wt,d:rh,x:rx+rw-wt/2,z:rz+rh/2}].forEach(wd=>{
         const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
@@ -1132,7 +1132,7 @@ function rebuild3d(){
     } else if(el.type==='wall'){
       const x1=el.x1/PX_PER_FT-cx,z1=el.y1/PX_PER_FT-cz,x2=el.x2/PX_PER_FT-cx,z2=el.y2/PX_PER_FT-cz;
       const len=Math.hypot(x2-x1,z2-z1); if(len<0.05)continue;
-      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wallH,0.2),new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0}));
+      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wallH,0.25),new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0,side:THREE.DoubleSide}));
       m.position.set((x1+x2)/2,yBase+wallH/2,(z1+z2)/2);
       m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;m.userData.fp=true;scene3.add(m);
 
@@ -1171,42 +1171,64 @@ function rebuild3d(){
       knob.userData.fp=true;scene3.add(knob);
 
     } else if(el.type==='window'){
-      // Window: rendered at actual position/angle, sits in wall, visible both sides
+      // Window: glass is thick enough to pierce both wall faces — visible inside & out
       const winLen = (el.len||PX_PER_FT*4)/PX_PER_FT;
-      const winH = wallH * 0.42;           // ~42% of wall height
-      const sillH = wallH * 0.35;          // sill at 35% up the wall
-      const wallThk = 0.26;
+      const winH   = wallH * 0.42;   // ~42% of wall height
+      const sillH  = wallH * 0.35;   // sill 35% up
+      const glassD = 0.8;            // deeper than wall (wt=0.25) so it pokes out both faces
+      const frameD = glassD + 0.04;
       const wx3 = el.x/PX_PER_FT-cx, wz3 = el.y/PX_PER_FT-cz;
       const wAng = -(el.angle||0);
-      // Glass (double-sided so visible from inside and outside)
-      const glassMat = new THREE.MeshBasicMaterial({color:0xa8d8f0,transparent:true,opacity:0.42,side:THREE.DoubleSide,depthWrite:false});
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(winLen,winH,wallThk*0.5),glassMat);
-      glass.position.set(wx3,yBase+sillH+winH/2,wz3);
-      glass.rotation.y=wAng;glass.userData.fp=true;scene3.add(glass);
-      // Frame pieces
-      const fMat = new THREE.MeshBasicMaterial({color:0xe0ddd5,side:THREE.DoubleSide});
-      const fr = wallThk*0.55;
-      // Top and bottom rails
-      [{oy:winH/2},{oy:-winH/2}].forEach(({oy})=>{
-        const rail=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.08,0.07,fr),fMat);
-        rail.position.set(wx3,yBase+sillH+winH/2+oy,wz3);
-        rail.rotation.y=wAng;rail.userData.fp=true;scene3.add(rail);
+      const winY  = yBase+sillH+winH/2;
+
+      // Glass pane — MeshBasicMaterial, DoubleSide, renders on top of wall
+      const glassMat = new THREE.MeshBasicMaterial({
+        color:0xaad8f0, transparent:true, opacity:0.50,
+        side:THREE.DoubleSide, depthWrite:false
       });
-      // Left and right stiles
-      [{frac:-0.5},{frac:0.5}].forEach(({frac})=>{
-        const stile=new THREE.Mesh(new THREE.BoxGeometry(0.07,winH+0.07,fr),fMat);
-        const sa=wAng;
-        stile.position.set(wx3+winLen*frac*Math.cos(sa),yBase+sillH+winH/2,wz3+winLen*frac*Math.sin(sa));
-        stile.rotation.y=sa;stile.userData.fp=true;scene3.add(stile);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(winLen, winH, glassD), glassMat);
+      glass.renderOrder = 2;
+      glass.position.set(wx3, winY, wz3);
+      glass.rotation.y = wAng;
+      glass.userData.fp=true; scene3.add(glass);
+
+      // Frame: same deep slab, opaque white, renders behind glass but in front of wall
+      const fMat = new THREE.MeshBasicMaterial({color:0xf0ede6, side:THREE.DoubleSide});
+      // Outer frame box (full depth) — acts as the visible border from both sides
+      const frameOuter = new THREE.Mesh(new THREE.BoxGeometry(winLen+0.1, winH+0.1, frameD), fMat);
+      frameOuter.renderOrder = 1;
+      frameOuter.position.set(wx3, winY, wz3);
+      frameOuter.rotation.y = wAng;
+      frameOuter.userData.fp=true; scene3.add(frameOuter);
+      // Inner cutout illusion: slightly smaller glass sitting inside the frame
+      // (glass already renders on top via renderOrder, so this just gives frame border)
+
+      // Horizontal rails (top and bottom)
+      [{oy: winH/2+0.035},{oy:-(winH/2+0.035)}].forEach(({oy})=>{
+        const rail=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.12,0.08,frameD+0.02),fMat);
+        rail.renderOrder=1;
+        rail.position.set(wx3, winY+oy, wz3);
+        rail.rotation.y=wAng; rail.userData.fp=true; scene3.add(rail);
+      });
+      // Vertical stiles (left and right)
+      [-0.5,0.5].forEach(frac=>{
+        const sx=wx3+(winLen*frac+Math.sign(frac)*0.04)*Math.cos(wAng);
+        const sz=wz3+(winLen*frac+Math.sign(frac)*0.04)*Math.sin(wAng);
+        const stile=new THREE.Mesh(new THREE.BoxGeometry(0.09,winH+0.12,frameD+0.02),fMat);
+        stile.renderOrder=1;
+        stile.position.set(sx,winY,sz);
+        stile.rotation.y=wAng; stile.userData.fp=true; scene3.add(stile);
       });
       // Centre mullion
-      const mull=new THREE.Mesh(new THREE.BoxGeometry(0.05,winH,fr),fMat);
-      mull.position.set(wx3,yBase+sillH+winH/2,wz3);
-      mull.rotation.y=wAng;mull.userData.fp=true;scene3.add(mull);
-      // Sill ledge
-      const sill=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.2,0.06,fr+0.08),fMat);
-      sill.position.set(wx3,yBase+sillH,wz3);
-      sill.rotation.y=wAng;sill.userData.fp=true;scene3.add(sill);
+      const mull=new THREE.Mesh(new THREE.BoxGeometry(0.07,winH,frameD+0.02),fMat);
+      mull.renderOrder=1;
+      mull.position.set(wx3,winY,wz3);
+      mull.rotation.y=wAng; mull.userData.fp=true; scene3.add(mull);
+      // Sill ledge (outside only — protrudes outward from wall face)
+      const sill=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.25,0.06,0.18),fMat);
+      sill.renderOrder=1;
+      sill.position.set(wx3, yBase+sillH-0.03, wz3);
+      sill.rotation.y=wAng; sill.userData.fp=true; scene3.add(sill);
 
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
