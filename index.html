@@ -26,6 +26,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 .tb-btn:hover { background:var(--bg2); }
 .tb-btn.active { background:var(--bg2); border-color:var(--accent); color:var(--accent); }
 .tb-btn svg { width:13px; height:13px; }
+#area-badge { font-size:12px; color:var(--text2); background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:4px 10px; white-space:nowrap; flex-shrink:0; }
+#area-badge strong { color:var(--text); font-weight:500; }
 .tb-sep { width:0.5px; height:20px; background:var(--border); margin:0 2px; flex-shrink:0; }
 #main { display:flex; flex:1; overflow:hidden; }
 #sidebar { width:186px; flex-shrink:0; background:var(--bg); border-right:0.5px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
@@ -90,6 +92,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="tb-btn" id="btn-export-png"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 9l3 3 3-3M8 5v7"/></svg>PNG</button>
   <button class="tb-btn" id="btn-export-dxf"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 6h6M5 8h4M5 10h5"/></svg>DXF</button>
   <div class="tb-sep"></div>
+  <div id="area-badge">Total: <strong id="total-area">0</strong> sq ft</div>
+  <div class="tb-sep"></div>
   <button class="tb-btn" id="btn-toggle-3d"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3.5v5L8 14l-6-3.5v-5z"/><path d="M8 2v12M2 5.5l6 3.5 6-3.5"/></svg>3D View</button>
 
 </div>
@@ -109,9 +113,18 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <button class="tool-btn" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
     </div>
     <div class="sb-section">
-      <div class="sb-label">Openings</div>
-      <button class="tool-btn" data-tool="window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="6"/><line x1="9" y1="6" x2="9" y2="12"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Window</button>
-      <button class="tool-btn" data-tool="door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="9" height="13"/><path d="M4 2 A9 9 0 0 1 13 11" fill="none"/><circle cx="12" cy="9" r="1" fill="currentColor"/></svg>Door</button>
+      <div class="sb-label">Doors</div>
+      <button class="tool-btn" data-tool="door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="9" height="13"/><path d="M4 2 A9 9 0 0 1 13 11" fill="none"/><circle cx="12" cy="9" r="1" fill="currentColor"/></svg>Single door</button>
+      <button class="tool-btn" data-tool="double-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="13"/><path d="M9 2 A7 7 0 0 1 2 9"/><path d="M9 2 A7 7 0 0 0 16 9"/><line x1="9" y1="2" x2="9" y2="15"/></svg>Double door</button>
+      <button class="tool-btn" data-tool="sliding-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12"/><line x1="9" y1="3" x2="9" y2="15"/><line x1="5" y1="9" x2="8" y2="9"/><line x1="10" y1="9" x2="13" y2="9"/></svg>Sliding door</button>
+      <button class="tool-btn" data-tool="pocket-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12"/><rect x="2" y="3" width="7" height="12" fill="none"/><line x1="6" y1="9" x2="9" y2="9"/></svg>Pocket door</button>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Windows</div>
+      <button class="tool-btn" data-tool="window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="6"/><line x1="9" y1="6" x2="9" y2="12"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Double-hung</button>
+      <button class="tool-btn" data-tool="picture-window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/></svg>Picture window</button>
+      <button class="tool-btn" data-tool="bay-window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,12 6,6 12,6 16,12"/><line x1="6" y1="6" x2="6" y2="12"/><line x1="12" y1="6" x2="12" y2="12"/></svg>Bay window</button>
+      <button class="tool-btn" data-tool="skylight"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="10" height="10"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="4" y1="9" x2="14" y2="9"/></svg>Skylight</button>
     </div>
     <div class="sb-section">
       <div class="sb-label">Beds</div>
@@ -149,6 +162,22 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <button class="tool-btn" data-tool="shower"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><circle cx="9" cy="8" r="2"/><line x1="9" y1="10" x2="9" y2="14"/></svg>Shower</button>
       <button class="tool-btn" data-tool="sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="12" height="9" rx="1"/><ellipse cx="9" cy="10" rx="4" ry="3"/><line x1="9" y1="5" x2="9" y2="3"/></svg>Sink</button>
       <button class="tool-btn" data-tool="double-sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="16" height="9" rx="1"/><ellipse cx="5" cy="10" rx="3" ry="2.5"/><ellipse cx="13" cy="10" rx="3" ry="2.5"/></svg>Double sink</button>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Outdoor</div>
+      <button class="tool-btn" data-tool="balcony"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="8"/><line x1="2" y1="6" x2="16" y2="6"/><line x1="4" y1="6" x2="4" y2="14"/><line x1="8" y1="6" x2="8" y2="14"/><line x1="12" y1="6" x2="12" y2="14"/><line x1="16" y1="6" x2="16" y2="14"/></svg>Balcony</button>
+      <button class="tool-btn" data-tool="deck"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><line x1="2" y1="7" x2="16" y2="7"/><line x1="2" y1="10" x2="16" y2="10"/><line x1="2" y1="13" x2="16" y2="13"/></svg>Deck</button>
+      <button class="tool-btn" data-tool="patio"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Patio</button>
+      <button class="tool-btn" data-tool="pool"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8" rx="3"/><line x1="5" y1="8" x2="8" y2="10"/><line x1="8" y1="10" x2="11" y2="8"/><line x1="11" y1="8" x2="14" y2="10"/></svg>Pool</button>
+      <button class="tool-btn" data-tool="hot-tub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="3"/><circle cx="9" cy="9" r="4"/></svg>Hot tub</button>
+      <button class="tool-btn" data-tool="driveway"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="1" width="8" height="16"/><line x1="9" y1="1" x2="9" y2="17"/></svg>Driveway</button>
+      <button class="tool-btn" data-tool="path"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 Q5 9 6 16"/><path d="M12 2 Q13 9 12 16"/></svg>Path</button>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Planting</div>
+      <button class="tool-btn" data-tool="tree"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="5"/><line x1="9" y1="13" x2="9" y2="17"/></svg>Tree</button>
+      <button class="tool-btn" data-tool="shrub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="9" cy="10" rx="6" ry="5"/><ellipse cx="6" cy="8" rx="4" ry="4"/><ellipse cx="12" cy="8" rx="4" ry="4"/></svg>Shrub</button>
+      <button class="tool-btn" data-tool="garden-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="8" width="14" height="6" rx="1"/><line x1="5" y1="5" x2="5" y2="8"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="13" y1="5" x2="13" y2="8"/></svg>Garden bed</button>
     </div>
     <div class="sb-section">
       <div class="sb-label">Grid & Scale</div>
@@ -517,6 +546,17 @@ const FDEFS={
   'shower':      {w:3,  h:3,   label:'Shower'},
   'sink':        {w:2,  h:1.5, label:'Sink'},
   'double-sink': {w:4,  h:1.5, label:'Double sink'},
+  // Outdoor / landscaping
+  'balcony':     {w:8,  h:4,   label:'Balcony'},
+  'deck':        {w:12, h:8,   label:'Deck'},
+  'patio':       {w:10, h:10,  label:'Patio'},
+  'tree':        {w:4,  h:4,   label:'Tree'},
+  'shrub':       {w:2,  h:2,   label:'Shrub'},
+  'garden-bed':  {w:6,  h:3,   label:'Garden bed'},
+  'pool':        {w:12, h:6,   label:'Pool'},
+  'hot-tub':     {w:5,  h:5,   label:'Hot tub'},
+  'driveway':    {w:10, h:20,  label:'Driveway'},
+  'path':        {w:3,  h:8,   label:'Path'},
 };
 
 function drawFurniture(el, sel) {
@@ -658,6 +698,64 @@ function drawFurniture(el, sel) {
       ctx.beginPath();ctx.ellipse(sx,0,pw*0.2,ph*0.32,0,0,Math.PI*2);ctx.fill();ctx.stroke();
       ctx.beginPath();ctx.arc(sx,-ph/2+ph*0.18,pw*0.06,0,Math.PI*2);ctx.stroke();
     });
+  }
+  // ── Outdoor / Landscaping ──
+  else if(t==='balcony'||t==='deck'){
+    box(-pw/2,-ph/2,pw,ph);
+    const step=pw/6;
+    for(let i=1;i<6;i++){ctx.beginPath();ctx.moveTo(-pw/2+step*i,-ph/2);ctx.lineTo(-pw/2+step*i,ph/2);ctx.stroke();}
+    if(t==='balcony'){ctx.lineWidth=(sel?2:1.5)*0.5;ctx.setLineDash([3,2]);rect(-pw/2,-ph/2,pw,ph);ctx.setLineDash([]);}
+  } else if(t==='patio'){
+    box(-pw/2,-ph/2,pw,ph);
+    for(let xi=0;xi<4;xi++) for(let zi=0;zi<4;zi++){
+      ctx.strokeRect(-pw/2+xi*pw/4+pw*0.01,-ph/2+zi*ph/4+ph*0.01,pw/4-pw*0.02,ph/4-ph*0.02);
+    }
+  } else if(t==='pool'){
+    ctx.fillStyle=dark?'rgba(59,130,246,0.3)':'rgba(59,130,246,0.25)';
+    ctx.beginPath();ctx.ellipse(0,0,pw/2,ph/2,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=sel?'#3B82F6':'#1D4ED8';ctx.lineWidth=sel?2:1.5;
+    ctx.beginPath();ctx.ellipse(0,0,pw/2,ph/2,0,0,Math.PI*2);ctx.stroke();
+    ctx.setLineDash([3,3]);ctx.beginPath();ctx.ellipse(0,0,pw/2-pw*0.06,ph/2-ph*0.06,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+  } else if(t==='hot-tub'){
+    ctx.fillStyle=dark?'rgba(99,170,220,0.3)':'rgba(59,130,246,0.2)';
+    ctx.beginPath();ctx.ellipse(0,0,pw/2,ph/2,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=stroke;ctx.lineWidth=sel?2:1.5;
+    ctx.beginPath();ctx.ellipse(0,0,pw/2,ph/2,0,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.ellipse(0,0,pw/2*0.6,ph/2*0.6,0,0,Math.PI*2);ctx.stroke();
+  } else if(t==='driveway'){
+    ctx.fillStyle=dark?'rgba(80,80,80,0.4)':'rgba(150,150,150,0.3)';
+    ctx.fillRect(-pw/2,-ph/2,pw,ph);ctx.strokeRect(-pw/2,-ph/2,pw,ph);
+    ctx.setLineDash([ph/8,ph/12]);ctx.beginPath();ctx.moveTo(0,-ph/2);ctx.lineTo(0,ph/2);ctx.stroke();ctx.setLineDash([]);
+  } else if(t==='path'){
+    ctx.fillStyle=dark?'rgba(180,160,100,0.3)':'rgba(180,160,100,0.4)';
+    ctx.beginPath();ctx.rect(-pw/2,-ph/2,pw,ph);ctx.fill();ctx.stroke();
+    ctx.setLineDash([ph/10,ph/12]);ctx.beginPath();ctx.moveTo(0,-ph/2);ctx.lineTo(0,ph/2);ctx.stroke();ctx.setLineDash([]);
+  } else if(t==='tree'){
+    const r=Math.min(pw,ph)/2;
+    ctx.fillStyle=dark?'rgba(34,197,94,0.35)':'rgba(34,197,94,0.3)';
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=dark?'rgba(34,197,94,0.8)':'rgba(21,128,61,0.8)';ctx.lineWidth=sel?2:1.5;
+    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.arc(-r*0.25,-r*0.2,r*0.6,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle=dark?'rgba(120,80,40,0.8)':'rgba(92,51,23,0.9)';ctx.lineWidth=sel?2:1.5;
+    ctx.beginPath();ctx.moveTo(0,r*0.3);ctx.lineTo(0,r*0.85);ctx.stroke();
+  } else if(t==='shrub'){
+    ctx.fillStyle=dark?'rgba(34,197,94,0.25)':'rgba(34,197,94,0.2)';
+    for(const[ox,oy,or]of [[0,0,Math.min(pw,ph)/2],[pw*-0.2,ph*-0.15,Math.min(pw,ph)*0.38],[pw*0.2,ph*-0.15,Math.min(pw,ph)*0.38]]){
+      ctx.beginPath();ctx.arc(ox,oy,or,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=dark?'rgba(34,197,94,0.7)':'rgba(21,128,61,0.7)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(ox,oy,or,0,Math.PI*2);ctx.stroke();
+    }
+  } else if(t==='garden-bed'){
+    ctx.fillStyle=dark?'rgba(120,70,30,0.35)':'rgba(150,90,40,0.3)';
+    box(-pw/2,-ph/2,pw,ph);
+    const nPlants=Math.max(2,Math.round(pw/PX_PER_FT));
+    for(let i=0;i<nPlants;i++){
+      const px=-pw/2+pw*(i+0.5)/nPlants;
+      ctx.strokeStyle=dark?'rgba(34,197,94,0.8)':'rgba(21,128,61,0.8)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(px,ph*0.1);ctx.lineTo(px-pw*0.07,-ph*0.3);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(px,ph*0.1);ctx.lineTo(px+pw*0.07,-ph*0.3);ctx.stroke();
+    }
   }
   // ── Fallback ──
   else { box(-pw/2,-ph/2,pw,ph); }
@@ -805,8 +903,15 @@ canvas2d.addEventListener('mousedown',e=>{
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='lasso'){lassoActive=true;lassoPath=[{x,y}];return;}
   if(tool==='wall'||tool==='half-wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
-  if(tool==='window'||tool==='door'){
-    saveHistory();elements.push({type:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(tool==='window'?4:3),angle:0,floor:currentFloor});render2d();return;
+  const DOOR_TOOLS  =['door','double-door','sliding-door','pocket-door'];
+  const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
+  if(DOOR_TOOLS.includes(tool)){
+    const defLen={'door':3,'double-door':5,'sliding-door':4,'pocket-door':3};
+    saveHistory();elements.push({type:'door',dtype:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(defLen[tool]||3),angle:0,floor:currentFloor});render2d();return;
+  }
+  if(WIN_TOOLS.includes(tool)){
+    const defLen={'window':4,'picture-window':5,'bay-window':5,'skylight':3};
+    saveHistory();elements.push({type:'window',wtype:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(defLen[tool]||4),angle:0,floor:currentFloor});render2d();return;
   }
   if(FDEFS[tool]){
     const d=FDEFS[tool];saveHistory();
@@ -848,6 +953,7 @@ canvas2d.addEventListener('mouseup',e=>{
 // ══════════════════════════════════════════════════
 function updateAreas() {
   const rooms=elements.filter(e=>e.type==='room');
+  const _totalEl=document.getElementById('total-area'); if(_totalEl) _totalEl.textContent=(rooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)).toFixed(1);
   const gRooms=rooms.filter(r=>(r.floor||0)===0), uRooms=rooms.filter(r=>(r.floor||0)===1);
   const gTotal=gRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0);
   const uTotal=uRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0);
@@ -878,7 +984,17 @@ function updateProps() {
   let html='';
   if(el.type==='wall'){html+=row('Type',val(el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);}
   else if(el.type==='room'){html+=row('Type',val('Room'));html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));html+=row('Height',val(`${(el.h/PX_PER_FT).toFixed(2)} ft`));html+=row('Area',val(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft\u00b2`));html+=row('Label',inp('pe-label','text',el.label||''));}
-  else if(el.type==='window'||el.type==='door'){html+=row('Type',val(el.type==='window'?'Window':'Door'));html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="1" max="20" step="0.5"'));html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));}
+  else if(el.type==='door'){
+    const dtypes=[['door','Single door'],['double-door','Double door'],['sliding-door','Sliding door'],['pocket-door','Pocket door']];
+    html+=row('Style',`<select class="prop-input" id="pe-dtype">${dtypes.map(([v,l])=>`<option value="${v}"${(el.dtype||'door')===v?' selected':''}>${l}</option>`).join('')}</select>`);
+    html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="1" max="20" step="0.5"'));
+    html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
+  } else if(el.type==='window'){
+    const wtypes=[['window','Double-hung'],['picture-window','Picture'],['bay-window','Bay window'],['skylight','Skylight']];
+    html+=row('Style',`<select class="prop-input" id="pe-wtype">${wtypes.map(([v,l])=>`<option value="${v}"${(el.wtype||'window')===v?' selected':''}>${l}</option>`).join('')}</select>`);
+    html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="1" max="20" step="0.5"'));
+    html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
+  }
   else if(el.type==='furniture'){html+=row('Type',val(FDEFS[el.ftype]?.label||el.ftype));html+=row('Width (ft)',inp('pe-fw','number',el.fw,'min="1" max="30" step="0.5"'));html+=row('Depth (ft)',inp('pe-fh','number',el.fh,'min="1" max="30" step="0.5"'));html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));}
   html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
   html+=`<button class="del-btn" id="pe-del">Delete</button>`;
@@ -890,6 +1006,8 @@ function updateProps() {
   bind('pe-fw',e=>{el.fw=parseFloat(e.target.value)||1;render2d();});
   bind('pe-fh',e=>{el.fh=parseFloat(e.target.value)||1;render2d();});
   bind('pe-angle',e=>{el.angle=parseInt(e.target.value)*Math.PI/180;render2d();});
+  bind('pe-dtype',e=>{el.dtype=e.target.value;render2d();});
+  bind('pe-wtype',e=>{el.wtype=e.target.value;render2d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
   bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();});
   document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();render2d();});
@@ -898,7 +1016,7 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall',room:'Click + drag to draw a room',window:'Click to place',door:'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 document.querySelectorAll('.tool-btn[data-tool]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     tool=btn.dataset.tool;
@@ -1292,36 +1410,276 @@ function rebuild3d(){
 
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
-      // Per-type heights and colors
-      const furProps={
-        'single-bed':  {h:1.8,  col:0x8b7355},
-        'double-bed':  {h:1.8,  col:0x7a6248},
-        'bunk-bed':    {h:3.6,  col:0x6d5a3e},
-        'crib':        {h:1.0,  col:0xc8a882},
-        'sofa':        {h:2.8,  col:0x4a5c7a},
-        'l-sofa':      {h:2.8,  col:0x3d4f6a},
-        'armchair':    {h:2.8,  col:0x5a6b8a},
-        'office-chair':{h:3.2,  col:0x333333},
-        'dining-table':{h:2.5,  col:0x7a6248},
-        'desk':        {h:2.5,  col:0x8a7358},
-        'coffee-table':{h:1.4,  col:0x9a8060},
-        'wardrobe':    {h:7.0,  col:0xa08060},
-        'bookshelf':   {h:7.0,  col:0x9a8060},
-        'kitchen-counter':{h:3.0,col:0xd0c8b8},
-        'kitchen-island': {h:3.0,col:0xc8c0b0},
-        'fridge':      {h:6.0,  col:0xd8d8d8},
-        'oven':        {h:3.0,  col:0x888888},
-        'toilet':      {h:2.5,  col:0xf0eeea},
-        'bathtub':     {h:1.8,  col:0xe8e8f0},
-        'shower':      {h:7.2,  col:0xd0e8f0},
-        'sink':        {h:3.0,  col:0xe8e8ec},
-        'double-sink': {h:3.0,  col:0xe8e8ec},
-      };
-      const p=furProps[el.ftype]||{h:2.5,col:0x888888};
-      // Convert height from ft to scene units (scene 1 unit = 1ft)
-      const furH3 = p.h / 4;
-      const m=new THREE.Mesh(new THREE.BoxGeometry(el.fw,furH3,el.fh),new THREE.MeshLambertMaterial({color:p.col}));
-      m.position.set(fx2,yBase+furH3/2,fz2);m.rotation.y=-(el.angle||0);m.castShadow=true;m.userData.fp=true;scene3.add(m);
+      const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
+      const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; G.userData.fp=true; scene3.add(G);
+      const mat=(col,rough=0.8)=>new THREE.MeshLambertMaterial({color:col});
+      const box3=(w,h,d,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col));m.position.set(x,y,z);m.castShadow=true;G.add(m);return m;};
+      const cyl3=(r,h,col,x=0,y=0,z=0,segs=12)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,segs),mat(col));m.position.set(x,y,z);G.add(m);return m;};
+      const sph3=(r,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),mat(col));m.position.set(x,y,z);G.add(m);return m;};
+
+      if(t==='single-bed'||t==='double-bed'){
+        const bh=fh*0.95, mh=0.25, fh2=0.45, hbH=0.9;
+        box3(fw,mh,bh,0x5a3c22,0,mh/2,0);       // frame base
+        box3(fw,fh2,bh,0xe8ddd0,0,mh+fh2/2,0);  // mattress
+        box3(fw,hbH,0.12,0x5a3c22,0,mh+hbH/2,-bh/2+0.08); // headboard
+        box3(fw,0.3,0.12,0x5a3c22,0,mh+0.15, bh/2-0.08);  // footboard
+        if(t==='double-bed'){
+          box3(fw*0.45,0.18,bh*0.55,0xf5f0ea,fw*-0.23,mh+fh2+0.09,-bh*0.1); // pillow L
+          box3(fw*0.45,0.18,bh*0.55,0xf5f0ea,fw* 0.23,mh+fh2+0.09,-bh*0.1); // pillow R
+        } else {
+          box3(fw*0.7,0.16,bh*0.5,0xf5f0ea,0,mh+fh2+0.08,-bh*0.1);
+        }
+        box3(fw,0.06,bh,0x8a6a50,0,mh+fh2+0.03,0); // blanket top
+
+      } else if(t==='bunk-bed'){
+        const bh=fh; const mh=0.18; const fh2=0.32; const slH=0.7;
+        box3(fw,mh,bh,0x5a3c22,0,mh/2,0);
+        box3(fw,fh2,bh,0xddd5c8,0,mh+fh2/2,0);
+        box3(fw,mh,bh,0x5a3c22,0,slH+mh/2,0);
+        box3(fw,fh2,bh,0xddd5c8,0,slH+mh+fh2/2,0);
+        for(const lx of[-fw/2+0.06, fw/2-0.06]){
+          box3(0.08,slH+mh*2+fh2*2,0.08,0x5a3c22,lx,(slH+mh*2+fh2*2)/2,-bh/2+0.04);
+          box3(0.08,slH+mh*2+fh2*2,0.08,0x5a3c22,lx,(slH+mh*2+fh2*2)/2, bh/2-0.04);
+        }
+        // ladder
+        box3(0.06,slH,0.06,0x6b4c2a,fw/2+0.04,slH/2,-bh*0.3);
+        for(let ri=0;ri<3;ri++) box3(0.12,0.04,0.06,0x8a6040,fw/2+0.04,slH*(0.2+ri*0.3),-bh*0.3);
+
+      } else if(t==='crib'){
+        const bh=fh; const slH=0.7;
+        box3(fw,0.08,bh,0xd4b896,0,0.04,0); // base
+        const bars=8; for(let i=0;i<=bars;i++){box3(0.04,slH,0.04,0xc8a07a,fw*(-0.5+i/bars),slH/2,-bh/2+0.02);box3(0.04,slH,0.04,0xc8a07a,fw*(-0.5+i/bars),slH/2,bh/2-0.02);}
+        box3(fw,0.06,0.06,0xc8a07a,0,slH,-bh/2+0.02);
+        box3(fw,0.06,0.06,0xc8a07a,0,slH, bh/2-0.02);
+
+      } else if(t==='sofa'){
+        const sh=0.55, sw=0.48, aw=fw*0.15, ah=0.65, backH=0.65;
+        box3(fw,sh,fh,0x4a5c7a,0,sh/2,0);                       // seat
+        box3(fw,backH,0.2,0x3a4c6a,0,sh+backH/2,-fh/2+0.1);     // backrest
+        box3(aw,ah,fh,0x3a4c6a,-fw/2+aw/2,ah/2,0);               // left arm
+        box3(aw,ah,fh,0x3a4c6a, fw/2-aw/2,ah/2,0);               // right arm
+        // cushions
+        const nc=Math.max(2,Math.round(fw/0.7)); const cw=(fw-aw*2)/nc;
+        for(let i=0;i<nc;i++) box3(cw*0.92,sh*0.55,fh*0.85,0x5a6c8a,-fw/2+aw+cw*(i+0.5),sh*0.72+sh*0.27,0);
+
+      } else if(t==='l-sofa'){
+        // Two sofa sections
+        const sh=0.55; const aw=fw*0.12;
+        box3(fw,sh,fh*0.42,0x3d4f6a,0,sh/2,fh*0.29);
+        box3(fw*0.42,sh,fh,0x3d4f6a,fw*-0.29,sh/2,0);
+        box3(fw*0.42,0.65,0.18,0x2d3f5a,fw*-0.29,sh+0.32,-fh/2+0.1);
+        box3(0.18,0.65,fh,0x2d3f5a,-fw/2+0.09,sh+0.32,0);
+
+      } else if(t==='armchair'){
+        const sh=0.5, aw=fw*0.18, ah=0.6, backH=0.6;
+        box3(fw,sh,fh,0x5a6b8a,0,sh/2,0);
+        box3(fw,backH,0.18,0x4a5b7a,0,sh+backH/2,-fh/2+0.09);
+        box3(aw,ah,fh,0x4a5b7a,-fw/2+aw/2,ah/2,0);
+        box3(aw,ah,fh,0x4a5b7a, fw/2-aw/2,ah/2,0);
+        box3(fw-aw*2,sh*0.5,fh*0.85,0x6a7b9a,0,sh*0.75,fh*0.05);
+
+      } else if(t==='office-chair'){
+        const r=Math.min(fw,fh)/2;
+        cyl3(r*0.9,0.12,0x222222,0,0.06,0);    // seat
+        cyl3(r*0.75,0.08,0x333333,0,0.18,0);   // seat top
+        cyl3(0.04,0.55,0x555555,0,0.35+0.275,0); // post
+        cyl3(0.06,0.08,0x444444,0,0.62,0);      // tilt housing
+        // 5 caster arms
+        for(let i=0;i<5;i++){const a=i*Math.PI*2/5;const ax=Math.cos(a)*r*0.65,az=Math.sin(a)*r*0.65;box3(0.06,0.04,r*0.65,0x444444,ax/2,0.04,az/2);sph3(0.05,0x333333,ax,0.03,az);}
+        // backrest
+        box3(fw*0.85,0.55,0.06,0x222222,0,0.7+0.275,fh*-0.3);
+        cyl3(0.04,0.4,0x444444,0,0.55+0.275,fh*-0.3+0.05);
+
+      } else if(t==='dining-table'){
+        const th=0.1, legH=0.7, legR=0.04;
+        box3(fw,th,fh,0x8b6914,0,legH+th/2,0);
+        for(const[lx,lz] of [[-fw/2+0.1,-fh/2+0.1],[-fw/2+0.1,fh/2-0.1],[fw/2-0.1,-fh/2+0.1],[fw/2-0.1,fh/2-0.1]])
+          cyl3(legR,legH,0x7a5a0a,lx,legH/2,lz);
+
+      } else if(t==='desk'){
+        const th=0.08, legH=0.7;
+        box3(fw,th,fh,0x9a7a3a,0,legH+th/2,0);
+        box3(fw*0.35,legH,th,0x8a6a2a,-fw/2+fw*0.35/2,legH/2,-fh/2+th/2); // left panel
+        for(const lz of[-fh/2+0.06, fh/2-0.06]) cyl3(0.04,legH,0x8a6a2a,fw/2-0.08,legH/2,lz);
+        // drawer unit
+        box3(fw*0.3,legH*0.75,fh*0.4,0xb0903a,-fw/2+fw*0.3/2+0.02,legH*0.75/2,fh*0.2);
+        for(let di=0;di<3;di++) box3(fw*0.26,0.12,0.04,0xc8a840,-fw/2+fw*0.3/2+0.02,legH*0.75*(0.15+di*0.3),fh*0.2+fh*0.2-0.02);
+
+      } else if(t==='coffee-table'){
+        const th=0.06, legH=0.38;
+        box3(fw,th,fh,0xa08040,0,legH+th/2,0);
+        for(const[lx,lz] of[[-fw/2+0.08,-fh/2+0.08],[-fw/2+0.08,fh/2-0.08],[fw/2-0.08,-fh/2+0.08],[fw/2-0.08,fh/2-0.08]])
+          box3(0.06,legH,0.06,0x906030,lx,legH/2,lz);
+
+      } else if(t==='wardrobe'){
+        box3(fw,2.1,fh,0xb09060,0,1.05,0);
+        box3(fw,0.06,fh,0x906040,0,2.13,0); // top
+        box3(0.04,2.1,fh,0x907050,0,1.05,0); // centre divider
+        box3(fw,0.06,fh,0x906040,0,0.03,0);  // bottom
+        sph3(0.04,0xd4af37,-fw*0.24,1.05,fh/2+0.02);
+        sph3(0.04,0xd4af37, fw*0.24,1.05,fh/2+0.02);
+
+      } else if(t==='bookshelf'){
+        box3(fw,2.1,fh,0xa08050,0,1.05,0);
+        for(let si=0;si<4;si++) box3(fw,0.04,fh,0x806030,0,0.4+si*0.55,0);
+        // book spines per shelf
+        for(let si=0;si<4;si++){const sy=0.4+si*0.55+0.22;const nB=Math.round(fw/0.12);for(let bi=0;bi<nB;bi++){const bc=[0xc8302a,0x2860c8,0x28a028,0xc87820,0x882888,0xc8c828][bi%6];box3(0.08,0.32+Math.random()*0.1,fh*0.85,bc,-fw/2+0.08*(bi+0.5),sy,0);}}
+
+      } else if(t==='kitchen-counter'){
+        box3(fw,0.75,fh,0xd0c8b0,0,0.375,0);        // cabinet body
+        box3(fw+0.04,0.05,fh+0.04,0xe8e0d0,0,0.77,0); // countertop overhang
+        // hob (2 burners)
+        box3(fw*0.55,0.03,fh*0.6,0x555555,fw*0.05,0.785,0);
+        for(const[bx,bz] of [[-fw*0.1,-fh*0.1],[-fw*0.1,fh*0.1],[fw*0.2,-fh*0.1],[fw*0.2,fh*0.1]])
+          cyl3(fw*0.1,0.04,0x333333,bx,0.81,bz,10);
+        // door handles
+        for(const[dx] of[[-fw*0.25],[fw*0.25]]) cyl3(0.02,fw*0.35,0xd4af37,dx,0.45,fh/2+0.03);
+
+      } else if(t==='kitchen-island'){
+        box3(fw,0.78,fh,0xc8c0a8,0,0.39,0);
+        box3(fw+0.06,0.05,fh+0.06,0xe0d8c0,0,0.81,0);
+        for(const[bx,bz] of[[-fw*0.22,0],[fw*0.22,0],[0,-fh*0.18],[0,fh*0.18]])
+          cyl3(fw*0.09,0.04,0x3a3a3a,bx,0.84,bz,10);
+
+      } else if(t==='fridge'){
+        box3(fw,1.5,fh,0xe0e0e0,0,0.75,0);   // bottom (fridge)
+        box3(fw,0.9,fh,0xd8d8d8,0,1.5+0.45,0); // top (freezer)
+        box3(0.03,2.35,0.03,0xd4af37,fw/2-0.08,2.35/2,fh/2+0.02); // handle
+        box3(fw*0.9,0.02,fh*0.9,0x999999,0,0.5,fh/2-0.01); // door line
+
+      } else if(t==='oven'){
+        box3(fw,0.75,fh,0x888888,0,0.375,0);
+        box3(fw*0.8,0.38,fh*0.5,0x222222,0,0.375+0.19,0.02); // oven window
+        for(const kx of[-fw*0.3,0,fw*0.3]) cyl3(0.05,0.06,0xcccccc,kx,0.72,fh/2+0.01,8);
+        // cooktop
+        box3(fw,0.04,fh,0x555555,0,0.77,0);
+        for(const[bx,bz] of[[-fw*0.25,-fh*0.25],[-fw*0.25,fh*0.25],[fw*0.25,-fh*0.25],[fw*0.25,fh*0.25]])
+          cyl3(fw*0.12,0.05,0x333333,bx,0.8,bz,10);
+
+      } else if(t==='toilet'){
+        box3(fw*0.9,0.3,fh*0.35,0xf5f2ee,0,0.15,-fh*0.3);  // tank
+        const seat=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.45,fw*0.5,0.08,16,1,false,0,Math.PI*2),mat(0xeeeae4));
+        seat.scale.z=fh*0.65/(fw*0.95); seat.position.set(0,0.28,fh*0.08); G.add(seat);
+        const bowl=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.35,fw*0.42,0.22,16),mat(0xf5f2ee));
+        bowl.scale.z=fh*0.5/(fw*0.8); bowl.position.set(0,0.11,fh*0.08); G.add(bowl);
+
+      } else if(t==='bathtub'){
+        // tub shell
+        const outer=new THREE.Mesh(new THREE.BoxGeometry(fw,0.55,fh),mat(0xe8e8f5));
+        outer.position.set(0,0.275,0); G.add(outer);
+        const inner=new THREE.Mesh(new THREE.BoxGeometry(fw*0.88,0.4,fh*0.85),mat(0x9cc8e8));
+        inner.position.set(0,0.38,fh*0.02); G.add(inner);
+        // tap end
+        cyl3(0.04,0.22,0xc8c8c8,fw*0.3,0.55+0.11,-fh/2+0.12);
+        cyl3(0.02,0.1,0xd4af37,fw*0.3,0.55+0.22,-fh/2+0.12);
+        box3(fw,0.06,0.06,0xe0e0f0,0,0.58,fh/2-0.04); // rim
+
+      } else if(t==='shower'){
+        // tray
+        box3(fw,0.08,fh,0xd8d8d8,0,0.04,0);
+        // glass walls (3 sides, open 1 for entry)
+        const gm=new THREE.MeshLambertMaterial({color:0xb8d8e8,transparent:true,opacity:0.35,side:THREE.DoubleSide});
+        for(const[gw,gh,gd,gx,gy,gz] of [[fw,1.9,0.04,0,1.9/2,-fh/2+0.02],[fw,1.9,0.04,0,1.9/2,fh/2-0.02],[0.04,1.9,fh,fw/2-0.02,1.9/2,0]]){
+          const gls=new THREE.Mesh(new THREE.BoxGeometry(gw,gh,gd),gm);gls.position.set(gx,gy,gz);G.add(gls);
+        }
+        // shower head
+        cyl3(0.04,0.6,0xc8c8c8,fw*0.3,1.7,-fh*0.3);
+        cyl3(0.12,0.04,0x999999,fw*0.3,2.0,-fh*0.3);
+
+      } else if(t==='sink'){
+        box3(fw,0.78,fh,0xe8e8ec,0,0.39,0);
+        box3(fw*0.72,0.04,fh*0.65,0xd8d8dc,0,0.78,0);
+        const basin=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.28,fw*0.3,0.2,16),mat(0xccccd0));
+        basin.position.set(0,0.7,fh*0.05); G.add(basin);
+        cyl3(0.02,0.18,0xc8c8c8,0,0.9,fh/2-0.12);
+
+      } else if(t==='double-sink'){
+        box3(fw,0.78,fh,0xe8e8ec,0,0.39,0);
+        box3(fw,0.04,fh*0.65,0xd8d8dc,0,0.78,0);
+        for(const sx of[-fw*0.26,fw*0.26]){
+          const basin=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.18,fw*0.2,0.18,16),mat(0xccccd0));
+          basin.position.set(sx,0.7,0); G.add(basin);
+          cyl3(0.02,0.15,0xc8c8c8,sx,0.9,fh/2-0.1);
+        }
+
+      // ── Outdoor ──
+      } else if(t==='balcony'||t==='deck'){
+        const planks=Math.ceil(fw/0.15);
+        for(let i=0;i<planks;i++){
+          const pc=t==='deck'?0x8b6914:0xa07838;
+          box3(fw/planks*0.88,0.06,fh,pc,-fw/2+fw/planks*(i+0.5),0.03,0);
+        }
+        // railing posts
+        const posts=Math.ceil(fw/0.8);
+        for(let i=0;i<=posts;i++){
+          const px=-fw/2+fw*i/posts;
+          box3(0.06,0.9,0.06,0xd4b896,px,0.06+0.45,-fh/2+0.04);
+          box3(0.06,0.9,0.06,0xd4b896,px,0.06+0.45, fh/2-0.04);
+        }
+        box3(fw+0.06,0.06,0.06,0xd4b896,0,0.06+0.9,-fh/2+0.04);
+        box3(fw+0.06,0.06,0.06,0xd4b896,0,0.06+0.9, fh/2-0.04);
+
+      } else if(t==='patio'){
+        const tile=Math.min(fw,fh)/4;
+        const nx=Math.ceil(fw/tile), nz=Math.ceil(fh/tile);
+        for(let xi=0;xi<nx;xi++) for(let zi=0;zi<nz;zi++){
+          const alt=(xi+zi)%2;
+          box3(tile*0.97,0.06,tile*0.97,alt?0xd8cdb5:0xccc0a0,-fw/2+tile*(xi+0.5),0.03,-fh/2+tile*(zi+0.5));
+        }
+
+      } else if(t==='pool'){
+        const pm=new THREE.MeshLambertMaterial({color:0x1a6eb5,transparent:true,opacity:0.85});
+        const pool=new THREE.Mesh(new THREE.CylinderGeometry(fw/2,fw/2,0.25,32),pm);
+        pool.scale.z=fh/fw; pool.position.set(0,0.125,0); G.add(pool);
+        // pool surround
+        const rim=new THREE.Mesh(new THREE.CylinderGeometry(fw/2+0.12,fw/2+0.12,0.08,32),mat(0xd8cdb5));
+        rim.scale.z=fh/fw; rim.position.set(0,0.04,0); G.add(rim);
+
+      } else if(t==='hot-tub'){
+        box3(fw,0.5,fh,0xd8c8a0,0,0.25,0);
+        const inner=new THREE.MeshLambertMaterial({color:0x2090c8,transparent:true,opacity:0.8});
+        const ht=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.4,fw*0.4,0.35,20),inner);
+        ht.scale.z=fh/fw; ht.position.set(0,0.35,0); G.add(ht);
+        // jets
+        for(let i=0;i<6;i++){const a=i*Math.PI/3;cyl3(0.04,0.06,0xd8d8d8,Math.cos(a)*fw*0.3,0.5,Math.sin(a)*fh*0.3);}
+
+      } else if(t==='tree'){
+        const tr=Math.min(fw,fh)/2;
+        // trunk
+        cyl3(tr*0.15,tr*0.9,0x7a4a20,0,tr*0.45,0);
+        // canopy layers
+        for(const[r,y,col] of [[tr*0.9,tr*0.9+0.1,0x1a7a1a],[tr*0.72,tr*1.25,0x228b22],[tr*0.5,tr*1.55,0x2da82d]]){
+          const cm=new THREE.Mesh(new THREE.ConeGeometry(r,r*0.9,12),mat(col));
+          cm.position.set(0,y,0); G.add(cm);
+        }
+
+      } else if(t==='shrub'){
+        cyl3(Math.min(fw,fh)*0.12,Math.min(fw,fh)*0.25,0x7a5020,0,Math.min(fw,fh)*0.125,0);
+        const nr=4;
+        for(let i=0;i<nr;i++){const a=i*Math.PI*2/nr;const r=Math.min(fw,fh)*0.32;sph3(r*0.5,0x1e8c2e,Math.cos(a)*r*0.55,r*0.4,Math.sin(a)*r*0.55);}
+        sph3(Math.min(fw,fh)*0.35,0x22a030,0,Math.min(fw,fh)*0.5,0);
+
+      } else if(t==='garden-bed'){
+        box3(fw,0.18,fh,0x6b3d12,0,0.09,0); // soil
+        const nPlants=Math.max(2,Math.round(fw/0.5));
+        for(let i=0;i<nPlants;i++){
+          const px=-fw/2+fw*(i+0.5)/nPlants;
+          cyl3(0.03,0.3,0x2d7a1a,px,0.18+0.15,0);
+          sph3(0.12,0x28a028,px,0.18+0.3,0);
+        }
+
+      } else if(t==='driveway'){
+        box3(fw,0.04,fh,0x888880,0,0.02,0);
+        box3(fw*0.04,0.05,fh,0xffff88,0,0.025,0); // centre line
+
+      } else if(t==='path'){
+        const steps=Math.ceil(fh/0.4);
+        for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
+
+      } else {
+        // generic fallback box
+        box3(fw,0.5,fh,0x888888,0,0.25,0);
+      }
     }
   }
 
