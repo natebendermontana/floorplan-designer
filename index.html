@@ -1123,16 +1123,29 @@ document.addEventListener('mousedown', e=>{
 
 function ensureTabForTool(t){ /* no-op */ }
 
-document.querySelectorAll('.tool-btn[data-tool],.tool-tile[data-tool]').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    tool=btn.dataset.tool;
-    document.querySelectorAll('.tool-btn[data-tool],.tool-tile[data-tool]').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('st-tool').textContent=`Tool: ${tool}`;
-    ensureTabForTool(tool);
-    document.getElementById('st-hint').textContent=hints[tool]||'';
-    drawing=false;previewStart=null;previewEnd=null;lassoPath=[];lassoActive=false;render2d();
-  });
+// Delegated tool activation — works for elements added after script runs (e.g. dropdown panels)
+document.addEventListener('click', e => {
+  // Find the clicked element or its nearest ancestor that carries data-tool
+  const btn = e.target.closest('[data-tool]');
+  if (!btn) return;
+  // Ignore the dd-btn dropdown toggles themselves (they have no data-tool, but guard anyway)
+  if (btn.classList.contains('dd-btn')) return;
+  // Ignore floor switcher buttons
+  if (btn.classList.contains('floor-btn')) return;
+
+  const t = btn.dataset.tool;
+  if (!t) return;
+
+  tool = t;
+  // Deactivate all tool buttons/tiles — querySelectorAll runs at click-time so finds everything
+  document.querySelectorAll('[data-tool].tool-btn,[data-tool].tool-tile').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('st-tool').textContent = `Tool: ${tool}`;
+  document.getElementById('st-hint').textContent = hints[tool] || '';
+  drawing = false; previewStart = null; previewEnd = null; lassoPath = []; lassoActive = false;
+  // Close any open dropdown after selecting a tool
+  closeAllDropdowns();
+  render2d();
 });
 
 // ══════════════════════════════════════════════════
