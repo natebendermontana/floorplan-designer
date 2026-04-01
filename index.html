@@ -20,15 +20,19 @@
   }
 }
 body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg3); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-#topbar { height:44px; background:var(--bg); border-bottom:0.5px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:7px; flex-shrink:0; overflow-x:auto; }
-#topbar h1 { font-size:15px; font-weight:500; margin-right:4px; white-space:nowrap; }
-.tb-btn { padding:5px 10px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text); font-size:12px; cursor:pointer; display:flex; align-items:center; gap:5px; white-space:nowrap; flex-shrink:0; }
+#topbar { height:34px; background:var(--bg); border-bottom:0.5px solid var(--border); display:flex; align-items:center; padding:0 8px; gap:3px; flex-shrink:0; overflow-x:auto; }
+#topbar h1 { font-size:13px; font-weight:600; margin-right:2px; white-space:nowrap; letter-spacing:-0.02em; }
+.tb-btn { padding:4px 7px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text); font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap; flex-shrink:0; }
 .tb-btn:hover { background:var(--bg2); }
 .tb-btn.active { background:var(--bg2); border-color:var(--accent); color:var(--accent); }
 .tb-btn svg { width:13px; height:13px; }
-#area-badge { font-size:12px; color:var(--text2); background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:4px 10px; white-space:nowrap; flex-shrink:0; }
+.tb-icon { padding:4px 6px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.tb-icon:hover { background:var(--bg2); }
+.tb-icon.active { background:var(--bg2); border-color:var(--accent); color:var(--accent); }
+.tb-icon svg { width:14px; height:14px; }
+#area-badge { font-size:11px; color:var(--text2); background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:3px 8px; white-space:nowrap; flex-shrink:0; }
 #area-badge strong { color:var(--text); font-weight:500; }
-.tb-sep { width:0.5px; height:20px; background:var(--border); margin:0 2px; flex-shrink:0; }
+.tb-sep { width:0.5px; height:16px; background:var(--border); margin:0 1px; flex-shrink:0; }
 #main { display:flex; flex:1; overflow:hidden; }
 #sidebar { width:186px; flex-shrink:0; background:var(--bg); border-right:0.5px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
 .sb-section { padding:9px; border-bottom:0.5px solid var(--border); }
@@ -99,22 +103,28 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 </head>
 <body>
 <div id="topbar">
-  <h1>Floorplan Designer</h1>
+  <h1 title="Floorplan Designer">FP</h1>
   <div class="tb-sep"></div>
-  <button class="tb-btn" id="btn-undo"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1 1 1.5 4"/><path d="M2 4v4h4"/></svg>Undo</button>
-  <button class="tb-btn" id="btn-clear"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg>Clear</button>
+  <button class="tb-icon" id="btn-undo" title="Undo (⌘Z)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1 1 1.5 4"/><path d="M2 4v4h4"/></svg></button>
+  <button class="tb-icon" id="btn-clear" title="Clear all"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
   <div class="tb-sep"></div>
-  <button class="tb-btn" id="btn-save"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 13H3V3l3 0v3h5V3l2 2v8z"/><rect x="5" y="9" width="6" height="4"/></svg>Save plan</button>
-  <button class="tb-btn" id="btn-load"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h5l2 2h3v8H3z"/></svg>Load plan</button>
+  <button class="tb-icon" id="btn-save" title="Save plan (JSON)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 13H3V3l3 0v3h5V3l2 2v8z"/><rect x="5" y="9" width="6" height="4"/></svg></button>
+  <button class="tb-icon" id="btn-load" title="Load plan"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h5l2 2h3v8H3z"/></svg></button>
   <input type="file" id="file-input" accept=".json" style="display:none">
   <div class="tb-sep"></div>
-  <button class="tb-btn" id="btn-export-png"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 9l3 3 3-3M8 5v7"/></svg>PNG</button>
-  <button class="tb-btn" id="btn-export-dxf"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 6h6M5 8h4M5 10h5"/></svg>DXF</button>
+  <button class="tb-icon" id="btn-export-png" title="Export PNG"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 9l3 3 3-3M8 5v7"/></svg></button>
+  <button class="tb-icon" id="btn-export-dxf" title="Export DXF (Blender)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 6h6M5 8h4M5 10h5"/></svg></button>
   <div class="tb-sep"></div>
-  <div id="area-badge">Total: <strong id="total-area">0</strong> sq ft</div>
+  <div id="area-badge">&#x25a1; <strong id="total-area">0</strong> ft²</div>
   <div class="tb-sep"></div>
-  <button class="tb-btn" id="btn-toggle-3d"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3.5v5L8 14l-6-3.5v-5z"/><path d="M8 2v12M2 5.5l6 3.5 6-3.5"/></svg>3D View</button>
-
+  <button class="tb-btn" id="btn-toggle-3d" title="Toggle 3D preview"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3.5v5L8 14l-6-3.5v-5z"/><path d="M8 2v12M2 5.5l6 3.5 6-3.5"/></svg>3D</button>
+  <div class="tb-sep"></div>
+  <button class="tb-icon" id="btn-fit" title="Fit to view (Home)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+  <span style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0" title="Property size">Lot:</span>
+  <input id="lot-w" type="number" value="100" min="20" max="500" step="10" title="Lot width (ft)" style="width:42px;padding:2px 5px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:11px">
+  <span style="font-size:10px;color:var(--text3);flex-shrink:0">×</span>
+  <input id="lot-h" type="number" value="100" min="20" max="500" step="10" title="Lot height (ft)" style="width:42px;padding:2px 5px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:11px">
+  <span style="font-size:10px;color:var(--text3);flex-shrink:0">ft</span>
 </div>
 <div id="main">
   <div id="sidebar">
@@ -317,6 +327,14 @@ const wrap = document.getElementById('canvas-wrap');
 let PX_PER_FT = 20, GRID_FT = 1;
 const SNAP = () => PX_PER_FT * GRID_FT;
 
+// 2D viewport pan/zoom
+let viewOX = 40, viewOY = 40;   // canvas-space origin offset (pan)
+let viewZoom = 1.0;              // extra zoom multiplier on top of PX_PER_FT
+let spaceDown = false;           // space = pan mode
+let midPanning = false;
+let panStart = null;
+let panOriginX = 0, panOriginY = 0;
+
 let elements = [], history = [];
 let selected = null;
 let multiSel = [];
@@ -336,6 +354,18 @@ function resize() {
   canvas2d.height = wrap.clientHeight - 26;
   render2d();
 }
+function fitView() {
+  const lotW = parseFloat(document.getElementById('lot-w')?.value)||100;
+  const lotH = parseFloat(document.getElementById('lot-h')?.value)||100;
+  const pw = lotW * PX_PER_FT, ph = lotH * PX_PER_FT;
+  const margin = 40;
+  const scaleX = (canvas2d.width  - margin*2) / pw;
+  const scaleY = (canvas2d.height - margin*2) / ph;
+  viewZoom = Math.min(scaleX, scaleY, 2);
+  viewOX = (canvas2d.width  - pw * viewZoom) / 2;
+  viewOY = (canvas2d.height - ph * viewZoom) / 2;
+  render2d();
+}
 new ResizeObserver(resize).observe(wrap);
 
 // ══════════════════════════════════════════════════
@@ -347,6 +377,15 @@ const isDark = () => window.matchMedia('(prefers-color-scheme:dark)').matches;
 const dl = (blob,name) => { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); };
 
 function getPos(e) {
+  const r = canvas2d.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  const cx = src.clientX - r.left;
+  const cy = src.clientY - r.top;
+  // Inverse of ctx.setTransform(viewZoom,0,0,viewZoom,viewOX,viewOY)
+  return { x: (cx - viewOX) / viewZoom, y: (cy - viewOY) / viewZoom };
+}
+// Screen-space position (no transform) — used for pan tracking
+function getScreenPos(e) {
   const r = canvas2d.getBoundingClientRect();
   const src = e.touches ? e.touches[0] : e;
   return { x: src.clientX - r.left, y: src.clientY - r.top };
@@ -850,8 +889,42 @@ function drawFurniture(el, sel) {
 // ══════════════════════════════════════════════════
 // MAIN RENDER
 // ══════════════════════════════════════════════════
+// Property boundary overlay
+function drawPropertyBoundary() {
+  const lotW = parseFloat(document.getElementById('lot-w')?.value)||100;
+  const lotH = parseFloat(document.getElementById('lot-h')?.value)||100;
+  const pw = lotW * PX_PER_FT, ph = lotH * PX_PER_FT;
+  const dark = isDark();
+  // Shaded area outside boundary
+  ctx.fillStyle = dark ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.07)';
+  // Simple approach: draw 4 strips outside the lot
+  const M = 5000; // large enough to cover canvas
+  ctx.fillRect(-M, -M, M+0, M*2+ph); // left
+  ctx.fillRect(pw, -M, M, M*2+ph);   // right
+  ctx.fillRect(0, -M, pw, M);         // top
+  ctx.fillRect(0, ph, pw, M);         // bottom
+  // Boundary line
+  ctx.strokeStyle = dark ? 'rgba(255,200,50,0.7)' : 'rgba(180,120,0,0.7)';
+  ctx.lineWidth = 2 / viewZoom;
+  ctx.setLineDash([12/viewZoom, 6/viewZoom]);
+  ctx.strokeRect(0, 0, pw, ph);
+  ctx.setLineDash([]);
+  // Corner labels
+  ctx.font = `${11/viewZoom}px -apple-system,sans-serif`;
+  ctx.fillStyle = dark ? 'rgba(255,200,50,0.65)' : 'rgba(140,90,0,0.65)';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillText(`${lotW} ft`, pw/2 - (lotW.toString().length*3)/viewZoom, -3/viewZoom);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.save(); ctx.translate(-4/viewZoom, ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText(`${lotH} ft`, 0, 0); ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 function render2d() {
   ctx.clearRect(0,0,canvas2d.width,canvas2d.height);
+  ctx.save();
+  ctx.setTransform(viewZoom, 0, 0, viewZoom, viewOX, viewOY);
+  drawPropertyBoundary();
   drawGrid();
   // Draw other-floor elements first (dimmed), then current floor on top
   const otherFloor = elements.filter(e=>(e.floor||0)!==currentFloor);
@@ -881,12 +954,13 @@ function render2d() {
     ctx.globalAlpha=1;
   }
   if (lassoActive && lassoPath.length>1) {
-    ctx.save(); ctx.strokeStyle='#3B82F6'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+    ctx.strokeStyle='#3B82F6'; ctx.lineWidth=1.5/viewZoom; ctx.setLineDash([5/viewZoom,4/viewZoom]);
     ctx.fillStyle='rgba(59,130,246,0.08)';
     ctx.beginPath(); ctx.moveTo(lassoPath[0].x,lassoPath[0].y);
     lassoPath.forEach(p=>ctx.lineTo(p.x,p.y)); ctx.closePath();
-    ctx.fill(); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
   }
+  ctx.restore();
   updateAreas();
   if (panel3dOpen) rebuild3d();
 }
@@ -977,7 +1051,49 @@ canvas2d.addEventListener('mousemove',e=>{
   updateCursor(x,y);
 });
 
+// ── 2D Pan via middle-mouse or Space+drag, zoom via wheel ──────
+canvas2d.addEventListener('wheel', e => {
+  e.preventDefault();
+  const {x:mx, y:my} = getScreenPos(e);
+  const zoomFactor = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const newZoom = Math.max(0.15, Math.min(8, viewZoom * zoomFactor));
+  // Zoom towards cursor
+  viewOX = mx - (mx - viewOX) * (newZoom / viewZoom);
+  viewOY = my - (my - viewOY) * (newZoom / viewZoom);
+  viewZoom = newZoom;
+  render2d();
+}, { passive: false });
+
+canvas2d.addEventListener('mousedown', e => {
+  if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    midPanning = true;
+    panStart = getScreenPos(e);
+    panOriginX = viewOX; panOriginY = viewOY;
+    canvas2d.style.cursor = 'grab';
+    e.preventDefault(); return;
+  }
+});
+window.addEventListener('mousemove', e => {
+  if (!midPanning) return;
+  const sp = getScreenPos(e);
+  viewOX = panOriginX + (sp.x - panStart.x);
+  viewOY = panOriginY + (sp.y - panStart.y);
+  render2d();
+});
+window.addEventListener('mouseup', e => {
+  if (midPanning) { midPanning = false; canvas2d.style.cursor = spaceDown ? 'grab' : 'crosshair'; }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
+    spaceDown = true; canvas2d.style.cursor = 'grab'; e.preventDefault();
+  }
+}, true);
+document.addEventListener('keyup', e => {
+  if (e.key === ' ') { spaceDown = false; canvas2d.style.cursor = 'crosshair'; }
+}, true);
+
 canvas2d.addEventListener('mousedown',e=>{
+  if(e.button===1||(e.button===0&&spaceDown))return; // handled by pan
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='lasso'){lassoActive=true;lassoPath=[{x,y}];return;}
   if(tool==='wall'||tool==='half-wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
@@ -1148,6 +1264,9 @@ document.getElementById('btn-export-png').addEventListener('click',()=>{
 });
 document.getElementById('scale-input').addEventListener('input',e=>{PX_PER_FT=parseInt(e.target.value)||20;render2d();});
 document.getElementById('grid-input').addEventListener('input',e=>{GRID_FT=parseFloat(e.target.value)||1;render2d();});
+document.getElementById('btn-fit').addEventListener('click', fitView);
+document.getElementById('lot-w').addEventListener('input', render2d);
+document.getElementById('lot-h').addEventListener('input', render2d);
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
   if((e.metaKey||e.ctrlKey)&&e.key==='z'){document.getElementById('btn-undo').click();return;}
@@ -1156,6 +1275,7 @@ document.addEventListener('keydown',e=>{
     else if(selected){saveHistory();elements=elements.filter(x=>x!==selected);selected=null;updateProps();render2d();}
   }
   if(e.key==='Escape'){selected=null;multiSel=[];updateProps();render2d();}
+  if(e.key==='Home'){fitView();}
   const keys={v:'select',l:'lasso',w:'wall',h:'half-wall',r:'room',n:'window',d:'door'};
   if(keys[e.key])document.querySelector(`[data-tool="${keys[e.key]}"]`).click();
 });
@@ -1840,6 +1960,8 @@ function makeSprite(title,sub,color){
 }
 
 resize();
+// Start with the lot nicely centred
+setTimeout(fitView, 50);
 </script>
 </body>
 </html>
