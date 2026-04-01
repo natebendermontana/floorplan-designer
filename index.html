@@ -57,6 +57,25 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 #statusbar { position:absolute; bottom:0; left:0; right:0; height:26px; background:var(--bg); border-top:0.5px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:16px; font-size:11px; color:var(--text2); pointer-events:none; }
 #statusbar span { white-space:nowrap; }
 #st-hint { margin-left:auto; }
+/* ── Tabbed sidebar ── */
+#sb-tabs { display:flex; background:var(--bg); border-bottom:0.5px solid var(--border); flex-shrink:0; }
+.sb-tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:7px 2px 5px; border:none; border-bottom:2px solid transparent; background:transparent; color:var(--text3); cursor:pointer; font-size:9px; font-weight:500; letter-spacing:0.04em; text-transform:uppercase; }
+.sb-tab svg { width:18px; height:18px; }
+.sb-tab:hover { color:var(--text2); background:var(--bg2); }
+.sb-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.sb-panel { display:none; overflow-y:auto; flex:1; flex-direction:column; }
+.sb-panel.active { display:flex; }
+.sb-panel-inner { padding:6px 8px; }
+.sp-label { font-size:10px; font-weight:500; color:var(--text3); text-transform:uppercase; letter-spacing:0.07em; margin:8px 0 4px; }
+.sp-label:first-child { margin-top:4px; }
+.tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px; margin-bottom:4px; }
+.tool-tile { display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 4px 5px; border:0.5px solid var(--border); border-radius:var(--radius); background:var(--bg); cursor:pointer; font-size:10px; color:var(--text2); text-align:center; line-height:1.2; }
+.tool-tile:hover { background:var(--bg2); color:var(--text); }
+.tool-tile.active { background:var(--bg2); border-color:var(--accent); color:var(--accent); }
+.tool-tile svg { width:22px; height:22px; }
+/* Keep old tool-btn style for select/lasso row */
+.tool-btn-row { display:flex; gap:3px; margin-bottom:6px; }
+.tool-btn-row .tool-btn { flex:1; justify-content:center; padding:6px 4px; font-size:11px; }
 #panel-3d { width:0; flex-shrink:0; background:#12121f; border-left:0.5px solid var(--border); display:flex; flex-direction:column; overflow:hidden; transition:none; position:relative; }
 #panel-3d.open { width:420px; }
 #panel-3d.fullscreen { position:fixed; inset:0; width:100vw !important; height:100vh !important; z-index:1000; border:none; }
@@ -104,100 +123,150 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <button class="floor-btn" data-floor="1">Upper floor</button>
     </div>
     <div id="floor-indicator">Drawing on: <strong id="floor-name">Ground floor</strong></div>
-    <div class="sb-section">
-      <div class="sb-label">Draw</div>
-      <button class="tool-btn active" data-tool="select"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l5 13 2-5 5-2z"/></svg>Select</button>
-      <button class="tool-btn" data-tool="lasso"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 13C3.3 11.8 2 10 2 8c0-3.3 3.1-6 7-6s7 2.7 7 6-3.1 6-7 6c-.7 0-1.4-.1-2-.3L5 16z"/></svg>Lasso</button>
-      <button class="tool-btn" data-tool="wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="5" x2="2" y2="13"/><line x1="16" y1="5" x2="16" y2="13"/></svg>Wall</button>
-      <button class="tool-btn" data-tool="half-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="16" y2="12"/><line x1="2" y1="8" x2="2" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><line x1="2" y1="8" x2="16" y2="8" stroke-dasharray="2 2"/></svg>Half-wall</button>
-      <button class="tool-btn" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
+
+    <!-- Tab bar -->
+    <div id="sb-tabs">
+      <button class="sb-tab active" data-panel="draw">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 15l2-5L13 2l3 3-8 8-5 2z"/></svg>Draw
+      </button>
+      <button class="sb-tab" data-panel="openings">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><path d="M3 2 A8 8 0 0 1 11 10"/></svg>Open
+      </button>
+      <button class="sb-tab" data-panel="furniture">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="14" height="7"/><rect x="2" y="5" width="3" height="9"/><rect x="13" y="5" width="3" height="9"/></svg>Furn
+      </button>
+      <button class="sb-tab" data-panel="outdoor">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="4"/><line x1="9" y1="12" x2="9" y2="16"/><line x1="3" y1="16" x2="15" y2="16"/></svg>Out
+      </button>
+      <button class="sb-tab" data-panel="settings">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="3"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.2 3.2l1.4 1.4M13.4 13.4l1.4 1.4M3.2 14.8l1.4-1.4M13.4 4.6l1.4-1.4"/></svg>Set
+      </button>
     </div>
-    <div class="sb-section">
-      <div class="sb-label">Doors</div>
-      <button class="tool-btn" data-tool="door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="9" height="13"/><path d="M4 2 A9 9 0 0 1 13 11" fill="none"/><circle cx="12" cy="9" r="1" fill="currentColor"/></svg>Single door</button>
-      <button class="tool-btn" data-tool="double-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="13"/><path d="M9 2 A7 7 0 0 1 2 9"/><path d="M9 2 A7 7 0 0 0 16 9"/><line x1="9" y1="2" x2="9" y2="15"/></svg>Double door</button>
-      <button class="tool-btn" data-tool="sliding-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12"/><line x1="9" y1="3" x2="9" y2="15"/><line x1="5" y1="9" x2="8" y2="9"/><line x1="10" y1="9" x2="13" y2="9"/></svg>Sliding door</button>
-      <button class="tool-btn" data-tool="pocket-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12"/><rect x="2" y="3" width="7" height="12" fill="none"/><line x1="6" y1="9" x2="9" y2="9"/></svg>Pocket door</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Windows</div>
-      <button class="tool-btn" data-tool="window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="6"/><line x1="9" y1="6" x2="9" y2="12"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Double-hung</button>
-      <button class="tool-btn" data-tool="picture-window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/></svg>Picture window</button>
-      <button class="tool-btn" data-tool="bay-window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,12 6,6 12,6 16,12"/><line x1="6" y1="6" x2="6" y2="12"/><line x1="12" y1="6" x2="12" y2="12"/></svg>Bay window</button>
-      <button class="tool-btn" data-tool="skylight"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="10" height="10"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="4" y1="9" x2="14" y2="9"/></svg>Skylight</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Beds</div>
-      <button class="tool-btn" data-tool="single-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="9"/><line x1="2" y1="9" x2="16" y2="9"/><rect x="3" y="5" width="5" height="4" rx="1"/></svg>Single bed</button>
-      <button class="tool-btn" data-tool="double-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><line x1="2" y1="8" x2="16" y2="8"/><rect x="3" y="4" width="5" height="4" rx="1"/><rect x="10" y="4" width="5" height="4" rx="1"/></svg>Double bed</button>
-      <button class="tool-btn" data-tool="bunk-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="6"/><rect x="2" y="10" width="14" height="6"/><line x1="2" y1="5" x2="16" y2="5"/><line x1="2" y1="13" x2="16" y2="13"/></svg>Bunk bed</button>
-      <button class="tool-btn" data-tool="crib"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="10" height="10" rx="2"/><line x1="4" y1="7" x2="14" y2="7"/><line x1="4" y1="11" x2="14" y2="11"/></svg>Crib</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Seating</div>
-      <button class="tool-btn" data-tool="sofa"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="14" height="7"/><rect x="2" y="5" width="3" height="9"/><rect x="13" y="5" width="3" height="9"/><rect x="5" y="7" width="8" height="3"/></svg>Sofa</button>
-      <button class="tool-btn" data-tool="l-sofa"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="9" height="14"/><rect x="2" y="12" width="14" height="4"/><rect x="2" y="2" width="3" height="14"/></svg>L-sofa</button>
-      <button class="tool-btn" data-tool="armchair"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="12" height="9"/><rect x="3" y="4" width="3" height="11"/><rect x="12" y="4" width="3" height="11"/><rect x="6" y="6" width="6" height="4"/></svg>Armchair</button>
-      <button class="tool-btn" data-tool="office-chair"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><line x1="9" y1="14" x2="9" y2="17"/><line x1="6" y1="16" x2="12" y2="16"/></svg>Office chair</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Tables & Storage</div>
-      <button class="tool-btn" data-tool="dining-table"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/><line x1="3" y1="5" x2="3" y2="13"/><line x1="15" y1="5" x2="15" y2="13"/></svg>Dining table</button>
-      <button class="tool-btn" data-tool="desk"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="7"/><line x1="2" y1="12" x2="2" y2="16"/><line x1="16" y1="12" x2="16" y2="16"/><rect x="2" y="5" width="5" height="3"/></svg>Desk</button>
-      <button class="tool-btn" data-tool="coffee-table"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="12" height="6"/><line x1="4" y1="12" x2="4" y2="15"/><line x1="14" y1="12" x2="14" y2="15"/></svg>Coffee table</button>
-      <button class="tool-btn" data-tool="wardrobe"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/><line x1="9" y1="2" x2="9" y2="16"/><circle cx="7" cy="9" r="1" fill="currentColor"/><circle cx="11" cy="9" r="1" fill="currentColor"/></svg>Wardrobe</button>
-      <button class="tool-btn" data-tool="bookshelf"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/><line x1="2" y1="6" x2="16" y2="6"/><line x1="2" y1="10" x2="16" y2="10"/><line x1="2" y1="14" x2="16" y2="14"/></svg>Bookshelf</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Kitchen</div>
-      <button class="tool-btn" data-tool="kitchen-counter"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><rect x="2" y="4" width="14" height="3"/><circle cx="6" cy="8" r="1.5"/><circle cx="12" cy="8" r="1.5"/></svg>Counter</button>
-      <button class="tool-btn" data-tool="kitchen-island"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/><circle cx="6" cy="9" r="1.5"/><circle cx="12" cy="9" r="1.5"/></svg>Island</button>
-      <button class="tool-btn" data-tool="fridge"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="10" height="14"/><line x1="4" y1="8" x2="14" y2="8"/><line x1="9" y1="4" x2="9" y2="7"/><line x1="9" y1="9" x2="9" y2="14"/></svg>Fridge</button>
-      <button class="tool-btn" data-tool="oven"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><rect x="5" y="8" width="8" height="5"/><circle cx="6" cy="5.5" r="1"/><circle cx="9" cy="5.5" r="1"/><circle cx="12" cy="5.5" r="1"/></svg>Oven</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Bathroom</div>
-      <button class="tool-btn" data-tool="toilet"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="8" height="4" rx="1"/><ellipse cx="9" cy="12" rx="6" ry="5"/></svg>Toilet</button>
-      <button class="tool-btn" data-tool="bathtub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="9" rx="2"/><line x1="2" y1="8" x2="16" y2="8"/><circle cx="5" cy="6.5" r="1" fill="currentColor"/></svg>Bathtub</button>
-      <button class="tool-btn" data-tool="shower"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><circle cx="9" cy="8" r="2"/><line x1="9" y1="10" x2="9" y2="14"/></svg>Shower</button>
-      <button class="tool-btn" data-tool="sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="12" height="9" rx="1"/><ellipse cx="9" cy="10" rx="4" ry="3"/><line x1="9" y1="5" x2="9" y2="3"/></svg>Sink</button>
-      <button class="tool-btn" data-tool="double-sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="16" height="9" rx="1"/><ellipse cx="5" cy="10" rx="3" ry="2.5"/><ellipse cx="13" cy="10" rx="3" ry="2.5"/></svg>Double sink</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Outdoor</div>
-      <button class="tool-btn" data-tool="balcony"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="8"/><line x1="2" y1="6" x2="16" y2="6"/><line x1="4" y1="6" x2="4" y2="14"/><line x1="8" y1="6" x2="8" y2="14"/><line x1="12" y1="6" x2="12" y2="14"/><line x1="16" y1="6" x2="16" y2="14"/></svg>Balcony</button>
-      <button class="tool-btn" data-tool="deck"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><line x1="2" y1="7" x2="16" y2="7"/><line x1="2" y1="10" x2="16" y2="10"/><line x1="2" y1="13" x2="16" y2="13"/></svg>Deck</button>
-      <button class="tool-btn" data-tool="patio"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Patio</button>
-      <button class="tool-btn" data-tool="pool"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8" rx="3"/><line x1="5" y1="8" x2="8" y2="10"/><line x1="8" y1="10" x2="11" y2="8"/><line x1="11" y1="8" x2="14" y2="10"/></svg>Pool</button>
-      <button class="tool-btn" data-tool="hot-tub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="3"/><circle cx="9" cy="9" r="4"/></svg>Hot tub</button>
-      <button class="tool-btn" data-tool="driveway"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="1" width="8" height="16"/><line x1="9" y1="1" x2="9" y2="17"/></svg>Driveway</button>
-      <button class="tool-btn" data-tool="path"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 Q5 9 6 16"/><path d="M12 2 Q13 9 12 16"/></svg>Path</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Planting</div>
-      <button class="tool-btn" data-tool="tree"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="5"/><line x1="9" y1="13" x2="9" y2="17"/></svg>Tree</button>
-      <button class="tool-btn" data-tool="shrub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="9" cy="10" rx="6" ry="5"/><ellipse cx="6" cy="8" rx="4" ry="4"/><ellipse cx="12" cy="8" rx="4" ry="4"/></svg>Shrub</button>
-      <button class="tool-btn" data-tool="garden-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="8" width="14" height="6" rx="1"/><line x1="5" y1="5" x2="5" y2="8"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="13" y1="5" x2="13" y2="8"/></svg>Garden bed</button>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Grid & Scale</div>
-      <div class="prop-row">
-        <div class="prop-label">Scale: 1 ft =</div>
-        <div class="grid-row"><input class="prop-input" type="number" id="scale-input" value="20" min="10" max="80" step="5"><span style="font-size:12px;line-height:28px;color:var(--text2)">px</span></div>
-      </div>
-      <div class="prop-row">
-        <div class="prop-label">Snap grid (ft)</div>
-        <input class="prop-input" type="number" id="grid-input" value="1" min="0.5" max="5" step="0.5">
+
+    <!-- DRAW panel -->
+    <div class="sb-panel active" id="panel-draw">
+      <div class="sb-panel-inner">
+        <div class="tool-btn-row">
+          <button class="tool-btn active" data-tool="select"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l5 13 2-5 5-2z"/></svg>Select</button>
+          <button class="tool-btn" data-tool="lasso"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 13C3.3 11.8 2 10 2 8c0-3.3 3.1-6 7-6s7 2.7 7 6-3.1 6-7 6c-.7 0-1.4-.1-2-.3L5 16z"/></svg>Lasso</button>
+        </div>
+        <div class="sp-label">Structure</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
+          <button class="tool-tile" data-tool="wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="5" x2="2" y2="13"/><line x1="16" y1="5" x2="16" y2="13"/></svg>Wall</button>
+          <button class="tool-tile" data-tool="half-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="16" y2="12"/><line x1="2" y1="8" x2="2" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><line x1="2" y1="8" x2="16" y2="8" stroke-dasharray="2 2"/></svg>Half-wall</button>
+        </div>
       </div>
     </div>
-    <div class="sb-section">
-      <div class="sb-label">Room Areas</div>
-      <div id="area-list" style="font-size:12px;color:var(--text3)">No rooms yet</div>
+
+    <!-- OPENINGS panel -->
+    <div class="sb-panel" id="panel-openings">
+      <div class="sb-panel-inner">
+        <div class="sp-label">Doors</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="9" height="13"/><path d="M4 2 A9 9 0 0 1 13 11" fill="none"/><circle cx="12" cy="9" r="1" fill="currentColor"/></svg>Single</button>
+          <button class="tool-tile" data-tool="double-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="13"/><path d="M9 2 A7 7 0 0 1 2 9"/><path d="M9 2 A7 7 0 0 0 16 9"/><line x1="9" y1="2" x2="9" y2="15"/></svg>Double</button>
+          <button class="tool-tile" data-tool="sliding-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12"/><line x1="9" y1="3" x2="9" y2="15"/><line x1="5" y1="9" x2="8" y2="9"/><line x1="10" y1="9" x2="13" y2="9"/></svg>Sliding</button>
+          <button class="tool-tile" data-tool="pocket-door"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12"/><rect x="2" y="3" width="7" height="12" fill="none"/><line x1="6" y1="9" x2="9" y2="9"/></svg>Pocket</button>
+        </div>
+        <div class="sp-label">Windows</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="6"/><line x1="9" y1="6" x2="9" y2="12"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Dbl-hung</button>
+          <button class="tool-tile" data-tool="picture-window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/></svg>Picture</button>
+          <button class="tool-tile" data-tool="bay-window"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,12 6,6 12,6 16,12"/><line x1="6" y1="6" x2="6" y2="12"/><line x1="12" y1="6" x2="12" y2="12"/></svg>Bay</button>
+          <button class="tool-tile" data-tool="skylight"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="10" height="10"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="4" y1="9" x2="14" y2="9"/></svg>Skylight</button>
+        </div>
+      </div>
     </div>
-    <div class="sb-section" style="flex:1">
-      <div class="sb-label">Properties</div>
-      <div id="prop-content" style="font-size:12px;color:var(--text3)">Nothing selected</div>
+
+    <!-- FURNITURE panel -->
+    <div class="sb-panel" id="panel-furniture">
+      <div class="sb-panel-inner">
+        <div class="sp-label">Beds</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="single-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="9"/><line x1="2" y1="9" x2="16" y2="9"/><rect x="3" y="5" width="5" height="4" rx="1"/></svg>Single bed</button>
+          <button class="tool-tile" data-tool="double-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><line x1="2" y1="8" x2="16" y2="8"/><rect x="3" y="4" width="5" height="4" rx="1"/><rect x="10" y="4" width="5" height="4" rx="1"/></svg>Double bed</button>
+          <button class="tool-tile" data-tool="bunk-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="6"/><rect x="2" y="10" width="14" height="6"/><line x1="2" y1="5" x2="16" y2="5"/></svg>Bunk bed</button>
+          <button class="tool-tile" data-tool="crib"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="10" height="10" rx="2"/><line x1="4" y1="7" x2="14" y2="7"/><line x1="4" y1="11" x2="14" y2="11"/></svg>Crib</button>
+        </div>
+        <div class="sp-label">Seating</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="sofa"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="14" height="7"/><rect x="2" y="5" width="3" height="9"/><rect x="13" y="5" width="3" height="9"/></svg>Sofa</button>
+          <button class="tool-tile" data-tool="l-sofa"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="9" height="14"/><rect x="2" y="12" width="14" height="4"/></svg>L-sofa</button>
+          <button class="tool-tile" data-tool="armchair"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="12" height="9"/><rect x="3" y="4" width="3" height="11"/><rect x="12" y="4" width="3" height="11"/></svg>Armchair</button>
+          <button class="tool-tile" data-tool="office-chair"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><line x1="9" y1="14" x2="9" y2="17"/></svg>Office chair</button>
+        </div>
+        <div class="sp-label">Tables &amp; Storage</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="dining-table"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/></svg>Dining table</button>
+          <button class="tool-tile" data-tool="desk"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="7"/><rect x="2" y="5" width="5" height="3"/></svg>Desk</button>
+          <button class="tool-tile" data-tool="coffee-table"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="12" height="6"/></svg>Coffee table</button>
+          <button class="tool-tile" data-tool="wardrobe"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/><line x1="9" y1="2" x2="9" y2="16"/><circle cx="7" cy="9" r="1" fill="currentColor"/><circle cx="11" cy="9" r="1" fill="currentColor"/></svg>Wardrobe</button>
+          <button class="tool-tile" data-tool="bookshelf"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/><line x1="2" y1="6" x2="16" y2="6"/><line x1="2" y1="10" x2="16" y2="10"/><line x1="2" y1="14" x2="16" y2="14"/></svg>Bookshelf</button>
+        </div>
+        <div class="sp-label">Kitchen</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="kitchen-counter"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><circle cx="6" cy="8" r="1.5"/><circle cx="12" cy="8" r="1.5"/></svg>Counter</button>
+          <button class="tool-tile" data-tool="kitchen-island"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8"/><circle cx="6" cy="9" r="1.5"/><circle cx="12" cy="9" r="1.5"/></svg>Island</button>
+          <button class="tool-tile" data-tool="fridge"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="10" height="14"/><line x1="4" y1="8" x2="14" y2="8"/></svg>Fridge</button>
+          <button class="tool-tile" data-tool="oven"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><rect x="5" y="8" width="8" height="5"/></svg>Oven</button>
+        </div>
+        <div class="sp-label">Bathroom</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="toilet"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="8" height="4" rx="1"/><ellipse cx="9" cy="12" rx="6" ry="5"/></svg>Toilet</button>
+          <button class="tool-tile" data-tool="bathtub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="9" rx="2"/><line x1="2" y1="8" x2="16" y2="8"/></svg>Bathtub</button>
+          <button class="tool-tile" data-tool="shower"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><circle cx="9" cy="8" r="2"/></svg>Shower</button>
+          <button class="tool-tile" data-tool="sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="12" height="9" rx="1"/><ellipse cx="9" cy="10" rx="4" ry="3"/></svg>Sink</button>
+          <button class="tool-tile" data-tool="double-sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="16" height="9" rx="1"/><ellipse cx="5" cy="10" rx="3" ry="2.5"/><ellipse cx="13" cy="10" rx="3" ry="2.5"/></svg>Dbl sink</button>
+        </div>
+      </div>
     </div>
+
+    <!-- OUTDOOR panel -->
+    <div class="sb-panel" id="panel-outdoor">
+      <div class="sb-panel-inner">
+        <div class="sp-label">Outdoor spaces</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="balcony"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="8"/><line x1="4" y1="6" x2="4" y2="14"/><line x1="8" y1="6" x2="8" y2="14"/><line x1="12" y1="6" x2="12" y2="14"/><line x1="16" y1="6" x2="16" y2="14"/></svg>Balcony</button>
+          <button class="tool-tile" data-tool="deck"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><line x1="2" y1="7" x2="16" y2="7"/><line x1="2" y1="10" x2="16" y2="10"/><line x1="2" y1="13" x2="16" y2="13"/></svg>Deck</button>
+          <button class="tool-tile" data-tool="patio"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Patio</button>
+          <button class="tool-tile" data-tool="driveway"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="1" width="8" height="16"/><line x1="9" y1="1" x2="9" y2="17"/></svg>Driveway</button>
+          <button class="tool-tile" data-tool="path"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 Q5 9 6 16"/><path d="M12 2 Q13 9 12 16"/></svg>Path</button>
+        </div>
+        <div class="sp-label">Water</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="pool"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="14" height="8" rx="3"/><line x1="5" y1="8" x2="8" y2="10"/><line x1="8" y1="10" x2="11" y2="8"/><line x1="11" y1="8" x2="14" y2="10"/></svg>Pool</button>
+          <button class="tool-tile" data-tool="hot-tub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12" rx="3"/><circle cx="9" cy="9" r="4"/></svg>Hot tub</button>
+        </div>
+        <div class="sp-label">Planting</div>
+        <div class="tool-grid">
+          <button class="tool-tile" data-tool="tree"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="5"/><line x1="9" y1="13" x2="9" y2="17"/></svg>Tree</button>
+          <button class="tool-tile" data-tool="shrub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="9" cy="10" rx="6" ry="5"/><ellipse cx="6" cy="8" rx="4" ry="4"/><ellipse cx="12" cy="8" rx="4" ry="4"/></svg>Shrub</button>
+          <button class="tool-tile" data-tool="garden-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="8" width="14" height="6" rx="1"/><line x1="5" y1="5" x2="5" y2="8"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="13" y1="5" x2="13" y2="8"/></svg>Garden bed</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS panel -->
+    <div class="sb-panel" id="panel-settings">
+      <div class="sb-panel-inner">
+        <div class="sp-label">Grid &amp; Scale</div>
+        <div class="prop-row">
+          <div class="prop-label">Scale: 1 ft =</div>
+          <div class="grid-row"><input class="prop-input" type="number" id="scale-input" value="20" min="10" max="80" step="5"><span style="font-size:12px;line-height:28px;color:var(--text2)">px</span></div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-label">Snap grid (ft)</div>
+          <input class="prop-input" type="number" id="grid-input" value="1" min="0.5" max="5" step="0.5">
+        </div>
+        <div class="sp-label">Room Areas</div>
+        <div id="area-list" style="font-size:12px;color:var(--text3)">No rooms yet</div>
+        <div class="sp-label">Properties</div>
+        <div id="prop-content" style="font-size:12px;color:var(--text3)">Nothing selected</div>
+      </div>
+    </div>
+
+  </div>
   </div>
   <div id="work-area">
     <div id="canvas-wrap">
@@ -220,9 +289,18 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       </div>
       <canvas id="three-canvas"></canvas>
       <div id="panel-3d-footer">
-        <label>Wall height (ft)</label>
-        <input type="number" id="wall-height-input" value="9" min="6" max="20" step="0.5">
-        <span class="auto-note">updates as you draw</span>
+        <label>Wall ht</label>
+        <input type="number" id="wall-height-input" value="9" min="6" max="20" step="0.5" style="width:44px">
+        <span style="width:0.5px;height:14px;background:rgba(255,255,255,0.15);margin:0 2px;flex-shrink:0"></span>
+        <label>Slope</label>
+        <input type="number" id="slope-angle-input" value="0" min="0" max="30" step="1" style="width:40px" title="Slope angle in degrees">
+        <span style="font-size:10px;color:rgba(255,255,255,0.3)">°</span>
+        <select id="slope-dir-input" style="padding:3px 4px;border:0.5px solid rgba(255,255,255,0.18);border-radius:5px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);font-size:10px;width:46px">
+          <option value="N">N↑</option>
+          <option value="S">S↓</option>
+          <option value="E" selected>E→</option>
+          <option value="W">W←</option>
+        </select>
       </div>
     </div>
   </div>
@@ -1017,12 +1095,34 @@ function updateProps() {
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
 const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
-document.querySelectorAll('.tool-btn[data-tool]').forEach(btn=>{
+// ── Sidebar tab switching ──────────────────────────────────────
+document.querySelectorAll('.sb-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.sb-panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+tab.dataset.panel).classList.add('active');
+  });
+});
+// Auto-switch to correct tab when a tool is activated via keyboard shortcut
+function ensureTabForTool(t){
+  const map={select:'draw',lasso:'draw',wall:'draw','half-wall':'draw',room:'draw',
+    door:'openings','double-door':'openings','sliding-door':'openings','pocket-door':'openings',
+    window:'openings','picture-window':'openings','bay-window':'openings',skylight:'openings'};
+  const furKeys=Object.keys(FDEFS);
+  const panel=map[t]||(furKeys.includes(t)?'furniture':null)||((['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed'].includes(t))?'outdoor':null);
+  if(!panel)return;
+  document.querySelectorAll('.sb-tab').forEach(tb=>tb.classList.toggle('active',tb.dataset.panel===panel));
+  document.querySelectorAll('.sb-panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+panel));
+}
+
+document.querySelectorAll('.tool-btn[data-tool],.tool-tile[data-tool]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     tool=btn.dataset.tool;
-    document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tool-btn[data-tool],.tool-tile[data-tool]').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('st-tool').textContent=`Tool: ${tool}`;
+    ensureTabForTool(tool);
     document.getElementById('st-hint').textContent=hints[tool]||'';
     drawing=false;previewStart=null;previewEnd=null;lassoPath=[];lassoActive=false;render2d();
   });
@@ -1173,6 +1273,8 @@ document.addEventListener('keydown',e=>{
   });
 })();
 document.getElementById('wall-height-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
+document.getElementById('slope-angle-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
+document.getElementById('slope-dir-input').addEventListener('change',()=>{if(panel3dOpen)rebuild3d();});
 
 function initThree(){
   if(threeReady)return; threeReady=true;
@@ -1226,6 +1328,22 @@ function rebuild3d(){
   const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
   const FLOOR_SEP=0.4; // thickness of floor slab between levels
 
+  // Terrain slope
+  const slopeDeg=parseFloat(document.getElementById('slope-angle-input').value)||0;
+  const slopeDir=document.getElementById('slope-dir-input').value||'E';
+  const slopeRad=slopeDeg*Math.PI/180;
+  // slopeOffset(x3, z3): extra Y to add for an element at 3D position (x3, z3)
+  // positive slope means ground rises in the chosen compass direction
+  function slopeOffset(x3,z3){
+    if(slopeRad<0.001)return 0;
+    const t=Math.tan(slopeRad);
+    if(slopeDir==='E') return  x3*t;
+    if(slopeDir==='W') return -x3*t;
+    if(slopeDir==='S') return  z3*t;
+    if(slopeDir==='N') return -z3*t;
+    return 0;
+  }
+
   // Centre scene on bounding box
   let minX=Infinity,minZ=Infinity,maxX=-Infinity,maxZ=-Infinity;
   elements.forEach(el=>{
@@ -1241,7 +1359,12 @@ function rebuild3d(){
 
   for(const el of elements){
     const fl=el.floor||0;
-    const yBase=floorBase(fl);
+    // Compute element 3D centre for slope calculation
+    let _ecx3=0,_ecz3=0;
+    if(el.type==='room'){_ecx3=(el.x+el.w/2)/PX_PER_FT-cx;_ecz3=(el.y+el.h/2)/PX_PER_FT-cz;}
+    else if(el.type==='wall'){_ecx3=(el.x1+el.x2)/2/PX_PER_FT-cx;_ecz3=(el.y1+el.y2)/2/PX_PER_FT-cz;}
+    else{_ecx3=el.x/PX_PER_FT-cx;_ecz3=el.y/PX_PER_FT-cz;}
+    const yBase=floorBase(fl)+slopeOffset(_ecx3,_ecz3);
 
     if(el.type==='room'){
       const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
@@ -1683,9 +1806,25 @@ function rebuild3d(){
     }
   }
 
-  // Ground plane
-  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(300,300),new THREE.MeshLambertMaterial({color:0x1e1e30}));
-  gnd.rotation.x=-Math.PI/2;gnd.position.y=-0.12;gnd.receiveShadow=true;gnd.userData.fp=true;scene3.add(gnd);
+  // Ground plane — rotated to match terrain slope
+  const gndMat=new THREE.MeshLambertMaterial({color:0x2a3a2a,side:THREE.DoubleSide});
+  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(300,300),gndMat);
+  // Apply slope rotation around the axis perpendicular to slope direction
+  gnd.rotation.x=-Math.PI/2;
+  if(slopeRad>0.001){
+    const slopeAxis={E:new THREE.Vector3(0,0,1),W:new THREE.Vector3(0,0,-1),S:new THREE.Vector3(-1,0,0),N:new THREE.Vector3(1,0,0)}[slopeDir]||new THREE.Vector3(0,0,1);
+    gnd.rotateOnWorldAxis(slopeAxis,slopeRad);
+  }
+  gnd.position.y=-0.12;gnd.receiveShadow=true;gnd.userData.fp=true;scene3.add(gnd);
+  // Grass colour overlay strip so you see the slope
+  if(slopeRad>0.05){
+    const grassMat=new THREE.MeshLambertMaterial({color:0x3a6030,side:THREE.DoubleSide});
+    const grass=new THREE.Mesh(new THREE.PlaneGeometry(300,300),grassMat);
+    grass.rotation.x=-Math.PI/2;
+    const slopeAxis2={E:new THREE.Vector3(0,0,1),W:new THREE.Vector3(0,0,-1),S:new THREE.Vector3(-1,0,0),N:new THREE.Vector3(1,0,0)}[slopeDir]||new THREE.Vector3(0,0,1);
+    grass.rotateOnWorldAxis(slopeAxis2,slopeRad);
+    grass.position.y=-0.11;grass.userData.fp=true;scene3.add(grass);
+  }
 }
 
 function makeSprite(title,sub,color){
