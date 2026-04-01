@@ -67,8 +67,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 .dd-btn:hover, .dd-btn.open { background:var(--bg2); }
 .dd-btn.open { border-color:var(--accent); color:var(--accent); }
 .dd-btn svg { width:13px; height:13px; }
-.dd-overlay { display:none; position:fixed; inset:0; z-index:99; }
-.dd-overlay.open { display:block; }
+/* dd-overlay removed — using document mousedown instead */
 .dd-panel { display:none; position:fixed; top:35px; background:var(--bg); border:0.5px solid var(--border2); border-radius:var(--radius-lg); box-shadow:0 8px 24px rgba(0,0,0,0.15); z-index:100; padding:8px; min-width:200px; max-height:calc(100vh - 50px); overflow-y:auto; }
 .dd-panel.open { display:block; }
 .dd-section { margin-bottom:4px; }
@@ -1089,38 +1088,40 @@ function updateProps() {
 const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
 const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-out-btn':'dd-out'};
+
 function closeAllDropdowns(){
   Object.keys(DD_MAP).forEach(b=>{
     document.getElementById(b)?.classList.remove('open');
     document.getElementById(DD_MAP[b])?.classList.remove('open');
   });
-  document.getElementById('dd-overlay')?.classList.remove('open');
 }
+
 Object.keys(DD_MAP).forEach(btnId=>{
-  const btn=document.getElementById(btnId);
-  if(!btn)return;
-  const panelId=DD_MAP[btnId];
-  btn.addEventListener('click',e=>{
+  const btn = document.getElementById(btnId);
+  if(!btn) return;
+  const panelId = DD_MAP[btnId];
+  btn.addEventListener('click', e=>{
     e.stopPropagation();
-    const wasOpen=btn.classList.contains('open');
+    const wasOpen = btn.classList.contains('open');
     closeAllDropdowns();
     if(!wasOpen){
       btn.classList.add('open');
-      const panel=document.getElementById(panelId);
+      const panel = document.getElementById(panelId);
       panel.classList.add('open');
-      // Position panel below button
-      const r=btn.getBoundingClientRect();
-      panel.style.left=r.left+'px';
-      document.getElementById('dd-overlay').classList.add('open');
+      const r = btn.getBoundingClientRect();
+      panel.style.left = r.left + 'px';
     }
   });
 });
-document.getElementById('dd-overlay').addEventListener('click',closeAllDropdowns);
-// Close dropdown when a tool tile is clicked
-document.querySelectorAll('.tool-tile[data-tool],.tool-row .tool-tile[data-tool]').forEach(tile=>{
-  tile.addEventListener('click',closeAllDropdowns);
-});
-function ensureTabForTool(t){ /* no-op, dropdowns don't need tab sync */ }
+
+// Close on any click outside a dd-panel or dd-btn
+document.addEventListener('mousedown', e=>{
+  const inPanel = e.target.closest('.dd-panel');
+  const inBtn   = e.target.closest('.dd-btn');
+  if(!inPanel && !inBtn) closeAllDropdowns();
+}, true);
+
+function ensureTabForTool(t){ /* no-op */ }
 
 document.querySelectorAll('.tool-btn[data-tool],.tool-tile[data-tool]').forEach(btn=>{
   btn.addEventListener('click',()=>{
@@ -1155,8 +1156,8 @@ document.getElementById('btn-export-png').addEventListener('click',()=>{
 document.getElementById('scale-input').addEventListener('input',e=>{PX_PER_FT=parseInt(e.target.value)||20;render2d();});
 document.getElementById('grid-input').addEventListener('input',e=>{GRID_FT=parseFloat(e.target.value)||1;render2d();});
 document.getElementById('btn-fit').addEventListener('click', fitView);
-document.getElementById('lot-w').addEventListener('input', render2d);
-document.getElementById('lot-h').addEventListener('input', render2d);
+document.getElementById('lot-w').addEventListener('input', fitView);
+document.getElementById('lot-h').addEventListener('input', fitView);
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
   if((e.metaKey||e.ctrlKey)&&e.key==='z'){document.getElementById('btn-undo').click();return;}
@@ -1853,9 +1854,6 @@ resize();
 // Start with the lot nicely centred
 setTimeout(fitView, 50);
 </script>
-
-<!-- ── Tool dropdown overlay (closes on outside click) ── -->
-<div class="dd-overlay" id="dd-overlay"></div>
 
 <!-- DRAW dropdown -->
 <div class="dd-panel" id="dd-draw">
