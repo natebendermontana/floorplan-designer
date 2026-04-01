@@ -220,7 +220,7 @@ let drawing = false, previewStart = null, previewEnd = null;
 let dragEl = null, dragStart = null;
 let dragMultiOrigins = null;
 let activeHandle = null;
-let lassoPath = [], lassoActive = false;
+let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
 
 // ══════════════════════════════════════════════════
 // LAYOUT
@@ -444,15 +444,29 @@ function floorStrokeColor(el, selColor, normalDark, normalLight) {
 function drawWall(el, sel) {
   const dark=isDark(), alpha=floorAlpha(el);
   ctx.globalAlpha=alpha;
-  const wallColor=sel?'#3B82F6':((el.floor||0)!==currentFloor?(dark?'rgba(150,180,255,0.7)':'rgba(80,120,220,0.6)'):(dark?'#d8d7ce':'#2C2C2A'));
+  let wallColor;
+  if(sel) wallColor='#3B82F6';
+  else if((el.floor||0)!==currentFloor) wallColor=dark?'rgba(150,180,255,0.7)':'rgba(80,120,220,0.6)';
+  else if(el.landscape) wallColor=dark?'#b09070':'#7a6040';
+  else wallColor=dark?'#d8d7ce':'#2C2C2A';
   ctx.strokeStyle=wallColor; ctx.lineWidth=el.thickness||8; ctx.lineCap='round';
   ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
-  // Half-walls: overlay a dashed centre line in a lighter tone
   if (el.half) {
     ctx.strokeStyle=sel?'#93C5FD':(dark?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.7)');
     ctx.lineWidth=2; ctx.setLineDash([5,4]);
     ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
     ctx.setLineDash([]);
+  }
+  if (el.landscape) {
+    ctx.strokeStyle=sel?'#93C5FD':(dark?'rgba(200,160,80,0.6)':'rgba(100,70,20,0.5)');
+    ctx.lineWidth=1;
+    const len=Math.hypot(el.x2-el.x1,el.y2-el.y1), nTicks=Math.floor(len/12);
+    const ang=Math.atan2(el.y2-el.y1,el.x2-el.x1);
+    const px=Math.cos(ang+Math.PI/2)*3, py=Math.sin(ang+Math.PI/2)*3;
+    for(let i=1;i<nTicks;i++){
+      const t2=i/nTicks, tx=el.x1+(el.x2-el.x1)*t2, ty=el.y1+(el.y2-el.y1)*t2;
+      ctx.beginPath();ctx.moveTo(tx-px,ty-py);ctx.lineTo(tx+px,ty+py);ctx.stroke();
+    }
   }
   if (alpha > 0.5) dimLabel(el.x1,el.y1,el.x2,el.y2);
   ctx.globalAlpha=1;
@@ -549,6 +563,7 @@ const FDEFS={
   'hot-tub':     {w:5,  h:5,   label:'Hot tub'},
   'driveway':    {w:10, h:20,  label:'Driveway'},
   'path':        {w:3,  h:8,   label:'Path'},
+  'graded-area': {w:20, h:20,  label:'Graded area'},
 };
 
 function drawFurniture(el, sel) {
@@ -749,8 +764,23 @@ function drawFurniture(el, sel) {
       ctx.beginPath();ctx.moveTo(px,ph*0.1);ctx.lineTo(px+pw*0.07,-ph*0.3);ctx.stroke();
     }
   }
+  } else if(t==='graded-area'){
+    ctx.fillStyle=dark?'rgba(180,140,80,0.15)':'rgba(160,120,60,0.12)';
+    ctx.fillRect(-pw/2,-ph/2,pw,ph);
+    ctx.strokeStyle=sel?'#3B82F6':(dark?'rgba(200,160,80,0.9)':'rgba(140,100,40,0.9)');
+    ctx.lineWidth=sel?2:1.5; ctx.strokeRect(-pw/2,-ph/2,pw,ph);
+    ctx.lineWidth=0.75; ctx.setLineDash([4,4]);
+    ctx.strokeStyle=dark?'rgba(200,160,80,0.4)':'rgba(140,100,40,0.35)';
+    const step=Math.min(pw,ph)/5;
+    for(let i=1;i<10;i++){ctx.beginPath();ctx.moveTo(-pw/2+i*step,-ph/2);ctx.lineTo(-pw/2,-ph/2+i*step);ctx.stroke();}
+    ctx.setLineDash([]);
+    ctx.strokeStyle=sel?'#3B82F6':'rgba(120,80,30,0.9)'; ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(-pw/2,-ph/2);ctx.lineTo(pw/2,-ph/2);ctx.stroke();
+    ctx.font=`${Math.min(10,pw*0.12)}px -apple-system,sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=dark?'rgba(200,160,80,0.7)':'rgba(120,80,30,0.6)';
+    ctx.fillText('GRADED',0,0);
   // ── Fallback ──
-  else { box(-pw/2,-ph/2,pw,ph); }
+  } else { box(-pw/2,-ph/2,pw,ph); }
 
   // Label
   ctx.font='10px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -828,12 +858,12 @@ function render2d() {
     }
     ctx.globalAlpha=1;
   }
-  if (lassoActive && lassoPath.length>1) {
+  if (rectSelActive && rectSelStart && rectSelEnd) {
+    const rsx=Math.min(rectSelStart.x,rectSelEnd.x), rsy=Math.min(rectSelStart.y,rectSelEnd.y);
+    const rsw=Math.abs(rectSelEnd.x-rectSelStart.x), rsh=Math.abs(rectSelEnd.y-rectSelStart.y);
     ctx.strokeStyle='#3B82F6'; ctx.lineWidth=1.5/viewZoom; ctx.setLineDash([5/viewZoom,4/viewZoom]);
     ctx.fillStyle='rgba(59,130,246,0.08)';
-    ctx.beginPath(); ctx.moveTo(lassoPath[0].x,lassoPath[0].y);
-    lassoPath.forEach(p=>ctx.lineTo(p.x,p.y)); ctx.closePath();
-    ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillRect(rsx,rsy,rsw,rsh); ctx.strokeRect(rsx,rsy,rsw,rsh); ctx.setLineDash([]);
   }
   ctx.restore();
   updateAreas();
@@ -866,23 +896,18 @@ function hitTest(x,y) {
   return null;
 }
 
-function pointInPolygon(px,py,poly) {
-  let inside=false;
-  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
-    const xi=poly[i].x,yi=poly[i].y,xj=poly[j].x,yj=poly[j].y;
-    if(((yi>py)!==(yj>py))&&(px<(xj-xi)*(py-yi)/(yj-yi)+xi))inside=!inside;
-  }
-  return inside;
-}
-
-function lassoSelect() {
-  if(lassoPath.length<3)return;
+function rectSelect() {
+  if(!rectSelStart||!rectSelEnd) return;
+  const rx1=Math.min(rectSelStart.x,rectSelEnd.x), ry1=Math.min(rectSelStart.y,rectSelEnd.y);
+  const rx2=Math.max(rectSelStart.x,rectSelEnd.x), ry2=Math.max(rectSelStart.y,rectSelEnd.y);
+  if((rx2-rx1)<4&&(ry2-ry1)<4) return;
   multiSel=elements.filter(el=>{
-    if((el.floor||0)!==currentFloor)return false;
-    return pointInPolygon(elCenter(el).x,elCenter(el).y,lassoPath);
+    if((el.floor||0)!==currentFloor) return false;
+    const c=elCenter(el);
+    return c.x>=rx1&&c.x<=rx2&&c.y>=ry1&&c.y<=ry2;
   });
   selected=multiSel.length===1?multiSel[0]:null;
-  if(multiSel.length===1)multiSel=[];
+  if(multiSel.length===1) multiSel=[];
   updateProps();
 }
 
@@ -904,7 +929,7 @@ function updateCursor(x,y) {
 canvas2d.addEventListener('mousemove',e=>{
   const{x,y}=getPos(e), sp=snapPt(x,y);
   document.getElementById('st-pos').textContent=`${(sp.x/PX_PER_FT).toFixed(1)}, ${(sp.y/PX_PER_FT).toFixed(1)} ft`;
-  if(tool==='lasso'&&lassoActive){lassoPath.push({x,y});render2d();return;}
+  if(tool==='rect-select'&&rectSelActive){rectSelEnd={x,y};render2d();return;}
   if(drawing){previewEnd=sp;render2d();return;}
   if(activeHandle){
     const{type,role,el,origin,mouseStart}=activeHandle;
@@ -970,8 +995,8 @@ document.addEventListener('keyup', e => {
 canvas2d.addEventListener('mousedown',e=>{
   if(e.button===1||(e.button===0&&spaceDown))return; // handled by pan
   const{x,y}=getPos(e), sp=snapPt(x,y);
-  if(tool==='lasso'){lassoActive=true;lassoPath=[{x,y}];return;}
-  if(tool==='wall'||tool==='half-wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
+  if(tool==='rect-select'){rectSelActive=true;rectSelStart={x,y};rectSelEnd={x,y};return;}
+  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
   const DOOR_TOOLS  =['door','double-door','sliding-door','pocket-door'];
   const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
   if(DOOR_TOOLS.includes(tool)){
@@ -998,14 +1023,14 @@ canvas2d.addEventListener('mousedown',e=>{
 
 canvas2d.addEventListener('mouseup',e=>{
   const{x,y}=getPos(e);
-  if(tool==='lasso'&&lassoActive){lassoActive=false;lassoSelect();lassoPath=[];render2d();return;}
+  if(tool==='rect-select'&&rectSelActive){rectSelActive=false;rectSelect();rectSelStart=null;rectSelEnd=null;render2d();return;}
   if(activeHandle){saveHistory();activeHandle=null;render2d();return;}
   if(dragEl){dragEl=null;dragStart=null;dragMultiOrigins=null;saveHistory();return;}
   if(!drawing)return;
   const sp=snapPt(x,y);
-  if(tool==='wall'||tool==='half-wall'){
+  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'){
     if(Math.hypot(sp.x-previewStart.x,sp.y-previewStart.y)>4){
-      saveHistory();elements.push({type:'wall',x1:previewStart.x,y1:previewStart.y,x2:sp.x,y2:sp.y,thickness:8,floor:currentFloor,half:tool==='half-wall'});
+      saveHistory();elements.push({type:'wall',x1:previewStart.x,y1:previewStart.y,x2:sp.x,y2:sp.y,thickness:tool==='landscape-wall'?5:8,floor:currentFloor,half:tool==='half-wall',landscape:tool==='landscape-wall'});
     }
   } else if(tool==='room'){
     const rw=Math.abs(sp.x-previewStart.x),rh=Math.abs(sp.y-previewStart.y);
@@ -1051,7 +1076,7 @@ function updateProps() {
   const inp=(id,type,value,extra='')=>`<input class="prop-input" id="${id}" type="${type}" value="${value}" ${extra}>`;
   const sel2=(id,opts,cur)=>`<select class="prop-input" id="${id}">${opts.map(([v,l])=>`<option value="${v}"${v==cur?' selected':''}>${l}</option>`).join('')}</select>`;
   let html='';
-  if(el.type==='wall'){html+=row('Type',val(el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);}
+  if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);}}
   else if(el.type==='room'){html+=row('Type',val('Room'));html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));html+=row('Height',val(`${(el.h/PX_PER_FT).toFixed(2)} ft`));html+=row('Area',val(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft\u00b2`));html+=row('Label',inp('pe-label','text',el.label||''));}
   else if(el.type==='door'){
     const dtypes=[['door','Single door'],['double-door','Double door'],['sliding-door','Sliding door'],['pocket-door','Pocket door']];
@@ -1085,7 +1110,7 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={select:'Click · drag to move · blue handles resize · green rotates',lasso:'Drag to lasso-select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
 const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-out-btn':'dd-out'};
 
@@ -1142,7 +1167,7 @@ document.addEventListener('click', e => {
   btn.classList.add('active');
   document.getElementById('st-tool').textContent = `Tool: ${tool}`;
   document.getElementById('st-hint').textContent = hints[tool] || '';
-  drawing = false; previewStart = null; previewEnd = null; lassoPath = []; lassoActive = false;
+  drawing = false; previewStart = null; previewEnd = null; rectSelStart = null; rectSelEnd = null; rectSelActive = false;
   // Close any open dropdown after selecting a tool
   closeAllDropdowns();
   render2d();
@@ -1180,7 +1205,7 @@ document.addEventListener('keydown',e=>{
   }
   if(e.key==='Escape'){selected=null;multiSel=[];updateProps();render2d();}
   if(e.key==='Home'){fitView();}
-  const keys={v:'select',l:'lasso',w:'wall',h:'half-wall',r:'room',n:'window',d:'door'};
+  const keys={v:'select',l:'rect-select',w:'wall',h:'half-wall',r:'room',n:'window',d:'door'};
   if(keys[e.key])document.querySelector(`[data-tool="${keys[e.key]}"]`).click();
 });
 
@@ -1381,14 +1406,46 @@ function rebuild3d(){
 
   let ri=0;
 
+  // Build per-room elevation map: each room sits level at its lowest-slope corner
+  const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area'];
+  const roomElevMap=new Map();
+  elements.filter(e=>e.type==='room').forEach(room=>{
+    const fl=room.floor||0;
+    const rx3=room.x/PX_PER_FT-cx, rz3=room.y/PX_PER_FT-cz;
+    const rx3b=(room.x+room.w)/PX_PER_FT-cx, rz3b=(room.y+room.h)/PX_PER_FT-cz;
+    const minSlopeY=Math.min(slopeOffset(rx3,rz3),slopeOffset(rx3b,rz3),slopeOffset(rx3,rz3b),slopeOffset(rx3b,rz3b));
+    roomElevMap.set(room,floorBase(fl)+minSlopeY);
+  });
+  function containingRoomElev(ex2d,ey2d,floor){
+    for(const[room,elev] of roomElevMap){
+      if((room.floor||0)!==floor)continue;
+      if(ex2d>=room.x&&ex2d<=room.x+room.w&&ey2d>=room.y&&ey2d<=room.y+room.h)return elev;
+    }
+    return null;
+  }
+
   for(const el of elements){
     const fl=el.floor||0;
-    // Compute element 3D centre for slope calculation
     let _ecx3=0,_ecz3=0;
     if(el.type==='room'){_ecx3=(el.x+el.w/2)/PX_PER_FT-cx;_ecz3=(el.y+el.h/2)/PX_PER_FT-cz;}
     else if(el.type==='wall'){_ecx3=(el.x1+el.x2)/2/PX_PER_FT-cx;_ecz3=(el.y1+el.y2)/2/PX_PER_FT-cz;}
     else{_ecx3=el.x/PX_PER_FT-cx;_ecz3=el.y/PX_PER_FT-cz;}
-    const yBase=floorBase(fl)+slopeOffset(_ecx3,_ecz3);
+    const terrainYBase=floorBase(fl)+slopeOffset(_ecx3,_ecz3);
+    let yBase;
+    if(el.type==='room'){
+      yBase=roomElevMap.get(el)??terrainYBase;
+    } else if(el.type==='furniture'&&OUTDOOR_FTYPES.includes(el.ftype)){
+      yBase=terrainYBase;
+    } else if(el.type==='furniture'||el.type==='door'||el.type==='window'){
+      yBase=containingRoomElev(el.x,el.y,fl)??terrainYBase;
+    } else if(el.type==='wall'&&el.landscape){
+      yBase=terrainYBase;
+    } else if(el.type==='wall'){
+      const mx2d=(el.x1+el.x2)/2, my2d=(el.y1+el.y2)/2;
+      yBase=containingRoomElev(mx2d,my2d,fl)??terrainYBase;
+    } else {
+      yBase=terrainYBase;
+    }
 
     if(el.type==='room'){
       const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
@@ -1417,11 +1474,22 @@ function rebuild3d(){
     } else if(el.type==='wall'){
       const x1=el.x1/PX_PER_FT-cx,z1=el.y1/PX_PER_FT-cz,x2=el.x2/PX_PER_FT-cx,z2=el.y2/PX_PER_FT-cz;
       const len=Math.hypot(x2-x1,z2-z1); if(len<0.05)continue;
-      const wh3d = el.half ? wallH*0.5 : wallH; // half-walls are 50% height
-      const wCol = el.half ? (fl===0?0xd8c8a0:0xc8d8e8) : (fl===0?0xcecac0:0xb8d4f0);
-      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,0.25),new THREE.MeshLambertMaterial({color:wCol,side:THREE.DoubleSide}));
+      let wh3d, wCol, wThk;
+      if(el.landscape){
+        wh3d=0.75; wCol=0x9a9080; wThk=0.3;
+      } else {
+        wh3d = el.half ? wallH*0.5 : wallH;
+        wCol = el.half ? (fl===0?0xd8c8a0:0xc8d8e8) : (fl===0?0xcecac0:0xb8d4f0);
+        wThk = 0.25;
+      }
+      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,wThk),new THREE.MeshLambertMaterial({color:wCol,side:THREE.DoubleSide}));
       m.position.set((x1+x2)/2,yBase+wh3d/2,(z1+z2)/2);
       m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;m.userData.fp=true;scene3.add(m);
+      if(el.landscape){
+        const cop=new THREE.Mesh(new THREE.BoxGeometry(len+0.06,0.08,wThk+0.1),new THREE.MeshLambertMaterial({color:0xb8b0a0}));
+        cop.position.set((x1+x2)/2,yBase+wh3d+0.04,(z1+z2)/2);
+        cop.rotation.y=-Math.atan2(z2-z1,x2-x1);cop.userData.fp=true;scene3.add(cop);
+      }
 
     } else if(el.type==='door'){
       // wallAng: door swing angle is perpendicular to the wall, so add PI/2
@@ -1823,6 +1891,12 @@ function rebuild3d(){
         const steps=Math.ceil(fh/0.4);
         for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
 
+      } else if(t==='graded-area'){
+        box3(fw,0.18,fh,0xc8c0a8,0,0.09,0); // flat platform
+        const retH=Math.max(0.3, Math.abs(slopeOffset(fx2,fz2-fh/2)-slopeOffset(fx2,fz2+fh/2))+0.5);
+        box3(fw,retH,0.35,0x9a9080,0,0.18+retH/2,-fh/2);
+        box3(fw+0.1,0.12,0.45,0xb0a890,0,0.18+retH+0.06,-fh/2);
+        box3(fw,retH*0.6,fh*0.15,0x7a6040,0,0.18+retH*0.3,-fh/2+fh*0.075);
       } else {
         // generic fallback box
         box3(fw,0.5,fh,0x888888,0,0.25,0);
@@ -1873,7 +1947,7 @@ setTimeout(fitView, 50);
   <div class="dd-section">
     <div class="tool-row">
       <button class="tool-tile active" data-tool="select"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l5 13 2-5 5-2z"/></svg>Select</button>
-      <button class="tool-tile" data-tool="lasso"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 13C3.3 11.8 2 10 2 8c0-3.3 3.1-6 7-6s7 2.7 7 6-3.1 6-7 6c-.7 0-1.4-.1-2-.3L5 16z"/></svg>Lasso</button>
+      <button class="tool-tile" data-tool="rect-select"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" stroke-dasharray="3 2"/></svg>Rect select</button>
     </div>
     <div class="dd-label">Structure</div>
     <div class="tool-grid">
@@ -1957,6 +2031,11 @@ setTimeout(fitView, 50);
       <button class="tool-tile" data-tool="patio"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10" rx="1"/><line x1="9" y1="4" x2="9" y2="14"/><line x1="2" y1="9" x2="16" y2="9"/></svg>Patio</button>
       <button class="tool-tile" data-tool="driveway"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="1" width="8" height="16"/><line x1="9" y1="1" x2="9" y2="17"/></svg>Driveway</button>
       <button class="tool-tile" data-tool="path"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 Q5 9 6 16"/><path d="M12 2 Q13 9 12 16"/></svg>Path</button>
+      <button class="tool-tile" data-tool="graded-area"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="14" height="10"/><line x1="2" y1="4" x2="16" y2="4" stroke-width="3"/><line x1="4" y1="7" x2="2" y2="14"/><line x1="8" y1="7" x2="6" y2="14"/><line x1="12" y1="7" x2="10" y2="14"/></svg>Graded area</button>
+    </div>
+    <div class="dd-label">Walls</div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="landscape-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="9" x2="16" y2="9" stroke-width="3"/><line x1="4" y1="9" x2="4" y2="14"/><line x1="8" y1="9" x2="8" y2="14"/><line x1="12" y1="9" x2="12" y2="14"/></svg>Landscape wall</button>
     </div>
     <div class="dd-label">Water</div>
     <div class="tool-grid">
