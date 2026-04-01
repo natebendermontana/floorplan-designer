@@ -1401,19 +1401,59 @@ function rebuild3d(){
   const cx=isFinite(minX)?(minX+maxX)/2/PX_PER_FT:0, cz=isFinite(minZ)?(minZ+maxZ)/2/PX_PER_FT:0;
 
   // Helper: Y base for a given floor
-  const floorBase = f => f===0 ? 0 : wallH + FLOOR_SEP;
+  // floorBase: base elevation for elements not inside a room
+  // For floor 0: follows raw terrain (slopeOffset is added per-element)
+  // For floor 1: uses average ground-floor room elevation + wallH, so standalone
+  //              upper-floor walls/items sit at the right height
+  const avgGroundElev = ()=>{
+    let sum=0,count=0;
+    for(const[room,elev] of roomElevMap){if((room.floor||0)===0){sum+=elev;count++;}}
+    return count>0?sum/count:0;
+  };
+  const floorBase = f => f===0 ? 0 : avgGroundElev()+wallH+FLOOR_SEP;
 
   let ri=0;
 
-  // Build per-room elevation map: each room sits level at its lowest-slope corner
+  // Build per-room elevation map
+  // Ground floor: level platform at its lowest-slope corner (like a real foundation)
+  // Upper floor: sits on top of the ground-floor room directly below it
   const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area'];
   const roomElevMap=new Map();
-  elements.filter(e=>e.type==='room').forEach(room=>{
-    const fl=room.floor||0;
+  const groundRooms=elements.filter(e=>e.type==='room'&&(e.floor||0)===0);
+  const upperRooms =elements.filter(e=>e.type==='room'&&(e.floor||0)===1);
+
+  // Pass 1: ground floor rooms
+  groundRooms.forEach(room=>{
     const rx3=room.x/PX_PER_FT-cx, rz3=room.y/PX_PER_FT-cz;
     const rx3b=(room.x+room.w)/PX_PER_FT-cx, rz3b=(room.y+room.h)/PX_PER_FT-cz;
     const minSlopeY=Math.min(slopeOffset(rx3,rz3),slopeOffset(rx3b,rz3),slopeOffset(rx3,rz3b),slopeOffset(rx3b,rz3b));
-    roomElevMap.set(room,floorBase(fl)+minSlopeY);
+    roomElevMap.set(room, minSlopeY); // yBase = just the slope offset; floorBase(0)=0
+  });
+
+  // Helper: given a 2D rect, find the ground-floor room with most overlap
+  function groundElevBelow(x,y,w,h){
+    let bestOverlap=0, bestElev=null;
+    for(const [room,elev] of roomElevMap){
+      if((room.floor||0)!==0) continue;
+      const ox=Math.max(0, Math.min(x+w,room.x+room.w)-Math.max(x,room.x));
+      const oz=Math.max(0, Math.min(y+h,room.y+room.h)-Math.max(y,room.y));
+      const overlap=ox*oz;
+      if(overlap>bestOverlap){bestOverlap=overlap;bestElev=elev;}
+    }
+    if(bestElev!==null) return bestElev;
+    // No ground room below — use average of all ground room elevations, or 0
+    if(roomElevMap.size>0){
+      let sum=0,count=0;
+      for(const[room,elev] of roomElevMap){if((room.floor||0)===0){sum+=elev;count++;}}
+      return count>0?sum/count:0;
+    }
+    return 0;
+  }
+
+  // Pass 2: upper floor rooms sit on top of whatever ground floor is below them
+  upperRooms.forEach(room=>{
+    const groundElev=groundElevBelow(room.x,room.y,room.w,room.h);
+    roomElevMap.set(room, groundElev+wallH+FLOOR_SEP);
   });
   function containingRoomElev(ex2d,ey2d,floor){
     for(const[room,elev] of roomElevMap){
@@ -1434,11 +1474,12 @@ function rebuild3d(){
     if(el.type==='room'){
       yBase=roomElevMap.get(el)??terrainYBase;
     } else if(el.type==='furniture'&&OUTDOOR_FTYPES.includes(el.ftype)){
-      yBase=terrainYBase;
+      // Outdoor elements sit on pure terrain — never on a floor platform
+      yBase=slopeOffset(_ecx3,_ecz3);
     } else if(el.type==='furniture'||el.type==='door'||el.type==='window'){
       yBase=containingRoomElev(el.x,el.y,fl)??terrainYBase;
     } else if(el.type==='wall'&&el.landscape){
-      yBase=terrainYBase;
+      yBase=slopeOffset(_ecx3,_ecz3);
     } else if(el.type==='wall'){
       const mx2d=(el.x1+el.x2)/2, my2d=(el.y1+el.y2)/2;
       yBase=containingRoomElev(mx2d,my2d,fl)??terrainYBase;
@@ -1500,7 +1541,10 @@ function rebuild3d(){
       const wallAng  = -(el.angle||0) - Math.PI/2;
 
       const dGroup = new THREE.Group();
-      dGroup.position.set(dx3, yBase, dz3);
+      // Offset so the door panel is centred on dx3,dz3 rather than hinged there
+      const hingOffX = Math.cos(wallAng) * (-doorLen/2);
+      const hingOffZ = Math.sin(wallAng) * (-doorLen/2);
+      dGroup.position.set(dx3 + hingOffX, yBase, dz3 + hingOffZ);
       dGroup.rotation.y = wallAng;
       dGroup.userData.fp = true;
       scene3.add(dGroup);
@@ -1903,25 +1947,27 @@ function rebuild3d(){
     }
   }
 
-  // Ground plane — rotated to match terrain slope
-  const gndMat=new THREE.MeshLambertMaterial({color:0x2a3a2a,side:THREE.DoubleSide});
-  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(300,300),gndMat);
-  // Apply slope rotation around the axis perpendicular to slope direction
-  gnd.rotation.x=-Math.PI/2;
-  if(slopeRad>0.001){
-    const slopeAxis={E:new THREE.Vector3(0,0,1),W:new THREE.Vector3(0,0,-1),S:new THREE.Vector3(-1,0,0),N:new THREE.Vector3(1,0,0)}[slopeDir]||new THREE.Vector3(0,0,1);
-    gnd.rotateOnWorldAxis(slopeAxis,slopeRad);
-  }
-  gnd.position.y=-0.12;gnd.receiveShadow=true;gnd.userData.fp=true;scene3.add(gnd);
-  // Grass colour overlay strip so you see the slope
-  if(slopeRad>0.05){
-    const grassMat=new THREE.MeshLambertMaterial({color:0x3a6030,side:THREE.DoubleSide});
-    const grass=new THREE.Mesh(new THREE.PlaneGeometry(300,300),grassMat);
-    grass.rotation.x=-Math.PI/2;
-    const slopeAxis2={E:new THREE.Vector3(0,0,1),W:new THREE.Vector3(0,0,-1),S:new THREE.Vector3(-1,0,0),N:new THREE.Vector3(1,0,0)}[slopeDir]||new THREE.Vector3(0,0,1);
-    grass.rotateOnWorldAxis(slopeAxis2,slopeRad);
-    grass.position.y=-0.11;grass.userData.fp=true;scene3.add(grass);
-  }
+  // Ground: a large tilted terrain plane.
+  // We use a BoxGeometry with many segments so we can keep it thick enough
+  // to fill below the structure without gaps.
+  const TERRAIN_SIZE=300;
+  const slopeAxis={E:new THREE.Vector3(0,0,1),W:new THREE.Vector3(0,0,-1),S:new THREE.Vector3(-1,0,0),N:new THREE.Vector3(1,0,0)}[slopeDir]||new THREE.Vector3(0,0,1);
+
+  // Grass plane (tilted)
+  const grassMat=new THREE.MeshLambertMaterial({color:0x3a6030,side:THREE.DoubleSide});
+  const grass=new THREE.Mesh(new THREE.PlaneGeometry(TERRAIN_SIZE,TERRAIN_SIZE),grassMat);
+  grass.rotation.x=-Math.PI/2;
+  if(slopeRad>0.001) grass.rotateOnWorldAxis(slopeAxis,slopeRad);
+  grass.position.y=-0.02;
+  grass.receiveShadow=true;grass.userData.fp=true;scene3.add(grass);
+
+  // Thick dirt fill below terrain — prevents seeing through the slope underside
+  const dirtMat=new THREE.MeshLambertMaterial({color:0x5a4030});
+  const dirt=new THREE.Mesh(new THREE.BoxGeometry(TERRAIN_SIZE,8,TERRAIN_SIZE),dirtMat);
+  dirt.rotation.x=0;
+  if(slopeRad>0.001) dirt.rotateOnWorldAxis(slopeAxis,slopeRad);
+  dirt.position.y=-4.04;
+  dirt.userData.fp=true;scene3.add(dirt);
 }
 
 function makeSprite(title,sub,color){
