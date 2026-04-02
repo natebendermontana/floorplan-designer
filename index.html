@@ -2177,24 +2177,48 @@ function rebuild3d(){
           box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
           box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
         } else if(t==='stairs-landing'){
-          // Switchback: run1 in left half, full-width landing, run2 in right half (reversed)
-          const runW=stairW/2;
-          const landDepth=treadD*0.16;
-          const runDepth=(treadD-landDepth)/2;
-          const nT=Math.max(3,Math.round(runDepth*2.5));
-          const rH=stairH/2/nT, tD=runDepth/nT;
-          // Run 1 — left half, steps go in +Z
-          for(let i=0;i<nT;i++)
-            box3(runW, rH*(i+1), tD, 0xd4c8a8, -runW/2, rH*(i+1)/2, -treadD/2+tD*(i+0.5));
-          // Full-width landing slab
-          box3(stairW, 0.2, landDepth, 0xc8c0a8, 0, stairH/2+0.1, -treadD/2+runDepth+landDepth/2);
-          // Run 2 — right half, continues from landing height in same +Z
-          for(let i=0;i<nT;i++)
-            box3(runW, stairH/2+rH*(i+1), tD, 0xd4c8a8, runW/2, (stairH/2+rH*(i+1))/2, -treadD/2+runDepth+landDepth+tD*(i+0.5));
-          // Outer stringers and centre divider
-          box3(0.06, stairH, treadD, 0x8a6a40, -stairW/2+0.04, stairH/2, 0);
-          box3(0.06, stairH, treadD, 0x8a6a40,  stairW/2-0.04, stairH/2, 0);
-          box3(0.06, stairH, treadD, 0x9a7a50, 0, stairH/2, 0);
+          // True switchback: run 1 goes +Z, landing spans full width, run 2 goes -Z (180° reversal)
+          // Both runs share the same Z footprint but sit in opposite X halves.
+          // Layout along Z axis:  [run1 treads: z = zBot → zMid] [landing: zMid → zTop]
+          //                       [run2 treads go from zTop back to zBot, reversed]
+          const runW   = stairW / 2;              // each run is half the total width
+          const landD  = Math.max(runW, treadD * 0.18); // landing depth ≥ run width so it feels wide
+          const runD   = treadD - landD;           // run depth along Z (same for both runs)
+          const nT     = Math.max(4, Math.round(runD * 2.8));
+          const rH     = stairH / 2 / nT;         // riser height per step (each run covers half total rise)
+          const tD     = runD / nT;               // tread depth per step
+
+          const zBot = -treadD / 2;               // near edge of footprint
+          const zMid = zBot + runD;               // where landing starts
+          const zTop = zMid + landD;              // far edge = should equal treadD/2
+
+          // Run 1 — left half (x = -runW/2 centre), travels +Z, rising from floor to mid-height
+          for(let i = 0; i < nT; i++){
+            // Cumulative-height stair box: each box includes all steps below it
+            box3(runW, rH*(i+1), tD, 0xd4c8a8, -runW/2, rH*(i+1)/2, zBot + tD*(i+0.5));
+          }
+
+          // Landing slab — full width, flat platform at mid-height
+          box3(stairW, 0.2, landD, 0xc0b898, 0, stairH/2 + 0.1, zMid + landD/2);
+
+          // Run 2 — right half (x = +runW/2 centre), travels -Z (reversed direction),
+          // starting from the far end (zTop) stepping back toward zMid level.
+          // Height starts at stairH/2 (landing level) and rises to stairH.
+          for(let i = 0; i < nT; i++){
+            box3(runW, stairH/2 + rH*(i+1), tD, 0xd4c8a8, runW/2,
+              (stairH/2 + rH*(i+1))/2,
+              zTop - tD*(i+0.5));  // note: stepping in -Z direction from far end
+          }
+
+          // Outer stringers (full-height side walls, run the full treadD)
+          box3(0.07, stairH, treadD, 0x8a6a40, -stairW/2 + 0.04, stairH/2, 0);
+          box3(0.07, stairH, treadD, 0x8a6a40,  stairW/2 - 0.04, stairH/2, 0);
+          // Centre stringer between the two runs
+          box3(0.07, stairH, runD, 0x9a7a50, 0, stairH/2, zBot + runD/2);
+          // Handrail posts at top of each run
+          const railMat = 0x7a6030;
+          box3(0.05, 0.9, 0.05, railMat, -runW/2, stairH/2 + 0.9/2, zMid - 0.1);
+          box3(0.05, 0.9, 0.05, railMat,  runW/2, stairH/2 + 0.9/2, zMid - 0.1);
         } else {
           const halfH=stairH/2, nT=Math.max(3,Math.round(fh/2*2));
           const tD=fh/2/nT, rH=halfH/nT;
