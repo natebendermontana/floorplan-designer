@@ -478,24 +478,44 @@ function drawWall(el, sel) {
 function drawRoom(el, sel) {
   const dark=isDark(), alpha=floorAlpha(el), isUpper=(el.floor||0)===1;
   ctx.globalAlpha=alpha;
-  ctx.strokeStyle=sel?'#3B82F6':((el.floor||0)!==currentFloor?(dark?'rgba(150,180,255,0.7)':'rgba(80,120,220,0.6)'):(dark?'#d8d7ce':'#2C2C2A'));
-  ctx.lineWidth=8;
-  // Upper floor rooms get a dashed outline to distinguish from ground
-  if (isUpper && (el.floor||0)===currentFloor) { ctx.setLineDash([8,4]); }
-  ctx.strokeRect(el.x,el.y,el.w,el.h); ctx.setLineDash([]);
+  // walls: {N,S,E,W} — missing key means wall is present (default open=false)
+  const W=el.walls||{N:true,S:true,E:true,W:true};
+  const baseColor=sel?'#3B82F6':((el.floor||0)!==currentFloor?(dark?'rgba(150,180,255,0.7)':'rgba(80,120,220,0.6)'):(dark?'#d8d7ce':'#2C2C2A'));
+  const openColor=sel?'rgba(59,130,246,0.45)':(dark?'rgba(255,255,255,0.22)':'rgba(0,0,0,0.18)');
+
+  // Fill
   ctx.fillStyle=sel?'rgba(59,130,246,0.06)':(isUpper?(dark?'rgba(147,197,253,0.06)':'rgba(59,130,246,0.04)'):(dark?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.02)'));
   ctx.fillRect(el.x,el.y,el.w,el.h);
+
+  // Draw each of the four sides individually
+  const sides=[
+    {key:'N', x1:el.x,       y1:el.y,       x2:el.x+el.w, y2:el.y},
+    {key:'S', x1:el.x,       y1:el.y+el.h,  x2:el.x+el.w, y2:el.y+el.h},
+    {key:'W', x1:el.x,       y1:el.y,       x2:el.x,       y2:el.y+el.h},
+    {key:'E', x1:el.x+el.w,  y1:el.y,       x2:el.x+el.w, y2:el.y+el.h},
+  ];
+  sides.forEach(({key,x1,y1,x2,y2})=>{
+    const open=W[key]===false;
+    ctx.beginPath();
+    ctx.strokeStyle=open?openColor:baseColor;
+    ctx.lineWidth=open?2:8;
+    if(open||isUpper) ctx.setLineDash(open?[4,4]:[8,4]);
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Labels
   const cx=el.x+el.w/2, cy=el.y+el.h/2;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   let yo=0;
   if(el.label){ctx.font='bold 12px -apple-system,sans-serif';ctx.fillStyle=dark?'rgba(255,255,255,0.55)':'rgba(0,0,0,0.45)';ctx.fillText(el.label,cx,cy-11);yo=11;}
   ctx.font='11px -apple-system,sans-serif'; ctx.fillStyle=dark?'rgba(255,255,255,0.3)':'rgba(0,0,0,0.27)';
-  ctx.fillText(`${(el.w/PX_PER_FT).toFixed(1)} \u00d7 ${(el.h/PX_PER_FT).toFixed(1)} ft`,cx,cy+yo);
+  ctx.fillText(`${(el.w/PX_PER_FT).toFixed(1)} × ${(el.h/PX_PER_FT).toFixed(1)} ft`,cx,cy+yo);
   ctx.fillStyle=dark?'rgba(255,255,255,0.18)':'rgba(0,0,0,0.17)';
-  ctx.fillText(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft\u00b2`,cx,cy+yo+13);
-  if (isUpper) { ctx.font='10px -apple-system,sans-serif'; ctx.fillStyle=dark?'rgba(147,197,253,0.7)':'rgba(59,130,246,0.6)'; ctx.fillText('Upper',cx,cy+yo+25); }
+  ctx.fillText(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft²`,cx,cy+yo+13);
+  if(isUpper){ctx.font='10px -apple-system,sans-serif';ctx.fillStyle=dark?'rgba(147,197,253,0.7)':'rgba(59,130,246,0.6)';ctx.fillText('Upper',cx,cy+yo+25);}
   ctx.textAlign='left'; ctx.globalAlpha=1;
-  if (sel) drawHandles(el);
+  if(sel) drawHandles(el);
 }
 
 function drawWindow(el, sel) {
@@ -1078,7 +1098,20 @@ function updateProps() {
   const sel2=(id,opts,cur)=>`<select class="prop-input" id="${id}">${opts.map(([v,l])=>`<option value="${v}"${v==cur?' selected':''}>${l}</option>`).join('')}</select>`;
   let html='';
   if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);}}
-  else if(el.type==='room'){html+=row('Type',val('Room'));html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));html+=row('Height',val(`${(el.h/PX_PER_FT).toFixed(2)} ft`));html+=row('Area',val(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft\u00b2`));html+=row('Label',inp('pe-label','text',el.label||''));}
+  else if(el.type==='room'){
+    html+=row('Type',val('Room'));
+    html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));
+    html+=row('Height',val(`${(el.h/PX_PER_FT).toFixed(2)} ft`));
+    html+=row('Area',val(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft²`));
+    html+=row('Label',inp('pe-label','text',el.label||''));
+    // Per-face open/closed toggles
+    const W=el.walls||{N:true,S:true,E:true,W:true};
+    const faceBtn=(key,label)=>{
+      const open=W[key]===false;
+      return `<button id="pe-wall-${key}" style="flex:1;padding:3px 0;border:0.5px solid var(--border2);border-radius:var(--radius);background:${open?'transparent':'var(--bg2)'};color:${open?'var(--text3)':'var(--text)'};font-size:10px;cursor:pointer" title="${open?'Open':'Walled'}">${label}</button>`;
+    };
+    html+=row('Walls',`<div style="display:flex;gap:3px;width:100%">${faceBtn('N','N↑')}${faceBtn('S','S↓')}${faceBtn('W','W←')}${faceBtn('E','E→')}</div>`);
+  }
   else if(el.type==='door'){
     const dtypes=[['door','Single door'],['double-door','Double door'],['sliding-door','Sliding door'],['pocket-door','Pocket door']];
     html+=row('Style',`<select class="prop-input" id="pe-dtype">${dtypes.map(([v,l])=>`<option value="${v}"${(el.dtype||'door')===v?' selected':''}>${l}</option>`).join('')}</select>`);
@@ -1104,6 +1137,22 @@ function updateProps() {
   bind('pe-dtype',e=>{el.dtype=e.target.value;render2d();});
   bind('pe-wtype',e=>{el.wtype=e.target.value;render2d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
+  // Wall face toggle buttons
+  ['N','S','E','W'].forEach(key=>{
+    const btn=document.getElementById('pe-wall-'+key);
+    if(!btn)return;
+    btn.addEventListener('click',()=>{
+      if(!el.walls)el.walls={N:true,S:true,E:true,W:true};
+      el.walls[key]=!el.walls[key];
+      // Update button appearance immediately
+      const open=!el.walls[key];
+      btn.style.background=open?'transparent':'var(--bg2)';
+      btn.style.color=open?'var(--text3)':'var(--text)';
+      btn.title=open?'Open':'Walled';
+      render2d();
+      if(panel3dOpen)rebuild3d();
+    });
+  });
   bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();});
   document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();render2d();});
 }
@@ -1569,11 +1618,20 @@ function rebuild3d(){
         }
       }
 
-      // Four walls
+      // Four walls — skip any face toggled open
       const wMat=new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0,side:THREE.DoubleSide});
       const wt=0.25;
-      [{w:rw,d:wt,x:rx+rw/2,z:rz+wt/2},{w:rw,d:wt,x:rx+rw/2,z:rz+rh-wt/2},
-       {w:wt,d:rh,x:rx+wt/2,z:rz+rh/2},{w:wt,d:rh,x:rx+rw-wt/2,z:rz+rh/2}].forEach(wd=>{
+      const roomW=el.walls||{N:true,S:true,E:true,W:true};
+      // Each entry: {key, w, d, x, z}
+      // N=top edge (z=rz), S=bottom (z=rz+rh), W=left (x=rx), E=right (x=rx+rw)
+      const wallDefs=[
+        {key:'N', w:rw, d:wt, x:rx+rw/2,   z:rz+wt/2},
+        {key:'S', w:rw, d:wt, x:rx+rw/2,   z:rz+rh-wt/2},
+        {key:'W', w:wt, d:rh, x:rx+wt/2,   z:rz+rh/2},
+        {key:'E', w:wt, d:rh, x:rx+rw-wt/2,z:rz+rh/2},
+      ];
+      wallDefs.forEach(wd=>{
+        if(roomW[wd.key]===false) return; // open face — no wall mesh
         const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
         m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;addFP(m,fl);
       });
