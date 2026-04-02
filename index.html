@@ -562,6 +562,10 @@ const FDEFS={
   'double-bed':  {w:5,  h:6.5, label:'Double bed'},
   'bunk-bed':    {w:3,  h:6.5, label:'Bunk bed'},
   'crib':        {w:2.5,h:4.5, label:'Crib'},
+  // Stairs (width × run-length in ft)
+  'stairs-straight': {w:4, h:10, label:'Straight stairs'},
+  'stairs-landing':  {w:4, h:12, label:'Stairs w/ landing'},
+  'stairs-l':        {w:8, h:8,  label:'L-shaped stairs'},
   // Seating
   'sofa':        {w:7,  h:3,   label:'Sofa'},
   'l-sofa':      {w:9,  h:9,   label:'L-sofa'},
@@ -810,6 +814,54 @@ function drawFurniture(el, sel) {
     ctx.font=`${Math.min(10,pw*0.12)}px -apple-system,sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillStyle=dark?'rgba(200,160,80,0.7)':'rgba(120,80,30,0.6)';
     ctx.fillText('GRADED',0,0);
+  } else if(t==='stairs-straight'){
+    // Tread lines + UP arrow
+    box(-pw/2,-ph/2,pw,ph);
+    const nT=Math.max(4,Math.round(ph/(PX_PER_FT*0.75)));
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.28)'; ctx.lineWidth=0.8;
+    for(let i=1;i<nT;i++){const y=-ph/2+ph*i/nT;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(pw/2,y);ctx.stroke();}
+    // Arrow pointing up (direction of travel)
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.5)'; ctx.lineWidth=1.5;
+    const ay1=-ph/2+ph*0.12, ay2=ph/2-ph*0.1;
+    ctx.beginPath();ctx.moveTo(0,ay1);ctx.lineTo(0,ay2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-pw*0.18,ay2-ph*0.12);ctx.lineTo(0,ay2);ctx.lineTo(pw*0.18,ay2-ph*0.12);ctx.stroke();
+    ctx.font=`bold ${Math.min(10,pw*0.22)}px -apple-system,sans-serif`;ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillStyle=dark?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.4)';ctx.fillText('UP',0,-ph/2+3);
+
+  } else if(t==='stairs-landing'){
+    // Two runs separated by a landing platform
+    const landH=ph*0.18, run=( ph-landH)*0.5;
+    box(-pw/2,-ph/2,pw,ph);
+    // Landing highlighted
+    ctx.fillStyle=dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.07)';
+    ctx.fillRect(-pw/2,-ph/2+run,pw,landH);
+    const nT=Math.max(3,Math.round(run/(PX_PER_FT*0.75)));
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.28)'; ctx.lineWidth=0.8;
+    for(let i=1;i<nT;i++){const y=-ph/2+run*i/nT;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(pw/2,y);ctx.stroke();}
+    for(let i=1;i<nT;i++){const y=-ph/2+run+landH+run*i/nT;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(pw/2,y);ctx.stroke();}
+    ctx.font=`bold ${Math.min(9,pw*0.2)}px -apple-system,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.38)';
+    ctx.fillText('LAND',0,-ph/2+run+landH/2);
+    // Arrow
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.5)'; ctx.lineWidth=1.5;
+    const ay2=ph/2-ph*0.08;
+    ctx.beginPath();ctx.moveTo(0,-ph/2+ph*0.06);ctx.lineTo(0,ay2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-pw*0.18,ay2-ph*0.12);ctx.lineTo(0,ay2);ctx.lineTo(pw*0.18,ay2-ph*0.12);ctx.stroke();
+
+  } else if(t==='stairs-l'){
+    // First run vertical, second run horizontal (L-shape)
+    const run1H=ph*0.55, run2W=pw*0.55, runW=pw*0.45, runH=ph*0.45;
+    box(-pw/2,-ph/2,runW,run1H);
+    box(-pw/2+runW-2/viewZoom,-ph/2+run1H-runH,run2W+2/viewZoom,runH+2/viewZoom);
+    const nT1=Math.max(3,Math.round(run1H/(PX_PER_FT*0.75)));
+    const nT2=Math.max(3,Math.round(run2W/(PX_PER_FT*0.75)));
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.28)'; ctx.lineWidth=0.8;
+    for(let i=1;i<nT1;i++){const y=-ph/2+run1H*i/nT1;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(-pw/2+runW,y);ctx.stroke();}
+    for(let i=1;i<nT2;i++){const x=-pw/2+runW+run2W*i/nT2;ctx.beginPath();ctx.moveTo(x,-ph/2+run1H-runH);ctx.lineTo(x,ph/2);ctx.stroke();}
+    // Landing corner square
+    ctx.fillStyle=dark?'rgba(255,255,255,0.09)':'rgba(0,0,0,0.06)';
+    ctx.fillRect(-pw/2+runW-2/viewZoom,-ph/2+run1H-runH,runW+2/viewZoom,runH+2/viewZoom);
+
   // ── Fallback ──
   } else { box(-pw/2,-ph/2,pw,ph); }
 
@@ -1012,7 +1064,7 @@ window.addEventListener('mousemove', e => {
   render2d();
 });
 window.addEventListener('mouseup', e => {
-  if (midPanning) { midPanning = false; canvas2d.style.cursor = spaceDown ? 'grab' : 'crosshair'; }
+  if (midPanning) { midPanning = false; canvas2d.style.cursor = spaceDown ? 'grab' : (tool==='select'?'default':'crosshair'); }
 });
 document.addEventListener('keydown', e => {
   if (e.key === ' ' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
@@ -1049,8 +1101,11 @@ canvas2d.addEventListener('mousedown',e=>{
     if(selected){const h=hitHandle(selected,x,y);if(h){activeHandle={type:h.type,role:h.role,el:selected,origin:JSON.parse(JSON.stringify(selected)),mouseStart:{x,y}};return;}}
     const hit=hitTest(x,y);
     if(hit&&multiSel.includes(hit)){dragEl=hit;dragStart={x,y};dragMultiOrigins=multiSel.map(el=>JSON.parse(JSON.stringify(el)));return;}
-    multiSel=[];selected=hit;updateProps();
-    if(hit){dragEl=hit;dragStart={x,y};dragMultiOrigins=[JSON.parse(JSON.stringify(hit))];}
+    if(hit){multiSel=[];selected=hit;updateProps();dragEl=hit;dragStart={x,y};dragMultiOrigins=[JSON.parse(JSON.stringify(hit))];render2d();return;}
+    // No element hit — pan the canvas by dragging empty space
+    multiSel=[];selected=null;updateProps();
+    midPanning=true;panStart=getScreenPos(e);panOriginX=viewOX;panOriginY=viewOY;
+    canvas2d.style.cursor='grabbing';
     render2d();
   }
 });
@@ -2171,6 +2226,12 @@ setTimeout(fitView, 50);
       <button class="tool-tile" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
       <button class="tool-tile" data-tool="wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="5" x2="2" y2="13"/><line x1="16" y1="5" x2="16" y2="13"/></svg>Wall</button>
       <button class="tool-tile" data-tool="half-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="16" y2="12"/><line x1="2" y1="8" x2="2" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><line x1="2" y1="8" x2="16" y2="8" stroke-dasharray="2 2"/></svg>Half-wall</button>
+    </div>
+    <div class="dd-label">Stairs</div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="stairs-straight"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><line x1="3" y1="5.5" x2="15" y2="5.5"/><line x1="3" y1="8.5" x2="15" y2="8.5"/><line x1="3" y1="11.5" x2="15" y2="11.5"/><polyline points="9,13 9,4 7,6" fill="none"/></svg>Straight</button>
+      <button class="tool-tile" data-tool="stairs-landing"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><line x1="3" y1="5.5" x2="15" y2="5.5"/><rect x="3" y="8" width="12" height="2" fill="currentColor" opacity=".2"/><line x1="3" y1="11.5" x2="15" y2="11.5"/><polyline points="9,13 9,4 7,6" fill="none"/></svg>Landing</button>
+      <button class="tool-tile" data-tool="stairs-l"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="7" height="9"/><rect x="2" y="9" width="14" height="7"/><line x1="2" y1="5" x2="9" y2="5"/><line x1="2" y1="7" x2="9" y2="7"/><line x1="6" y1="9" x2="6" y2="16"/><line x1="10" y1="9" x2="10" y2="16"/></svg>L-shaped</button>
     </div>
   </div>
 </div>
