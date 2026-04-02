@@ -1532,12 +1532,41 @@ function rebuild3d(){
         const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18}));
         fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
       } else {
-        // Upper floor: solid structural slab (visible from below as ceiling, and above as floor)
-        const slab=new THREE.Mesh(new THREE.BoxGeometry(rw,FLOOR_SEP,rh),new THREE.MeshLambertMaterial({color:0xd0cbc0}));
-        slab.position.set(rx+rw/2,yBase-FLOOR_SEP/2,rz+rh/2); slab.castShadow=true; addFP(slab,fl);
-        // Warm wood floor surface on top of slab
-        const floorSurf=new THREE.Mesh(new THREE.BoxGeometry(rw,0.05,rh),new THREE.MeshLambertMaterial({color:0xc4944a}));
-        floorSurf.position.set(rx+rw/2,yBase+0.025,rz+rh/2); addFP(floorSurf,fl);
+        // Upper floor structural slab — concrete, acts as ceiling for ground floor below.
+        // Tagged floor 0 so it stays visible when ground floor is shown; also tagged fl so
+        // it hides with the upper floor. We tag it as a special "both floors" mesh.
+        const slab=new THREE.Mesh(new THREE.BoxGeometry(rw,FLOOR_SEP,rh),
+          new THREE.MeshLambertMaterial({color:0xd4cfc4}));
+        slab.position.set(rx+rw/2,yBase-FLOOR_SEP/2,rz+rh/2);
+        slab.castShadow=true; slab.receiveShadow=true;
+        addFP(slab,fl);
+
+        // Wood floor surface — sits right on top of the slab at yBase.
+        // One solid base layer in warm oak colour.
+        const floorBase2=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),
+          new THREE.MeshLambertMaterial({color:0xb8864a}));
+        floorBase2.position.set(rx+rw/2,yBase+0.03,rz+rh/2);
+        floorBase2.receiveShadow=true;
+        addFP(floorBase2,fl);
+
+        // Hardwood planks — narrow boxes running along the room width (X axis),
+        // alternating slightly in colour to give a real plank look.
+        const nPlanks=Math.max(3,Math.round(rh/0.25)); // one plank per ~3 inches
+        const plankW=rh/nPlanks;
+        const colA=new THREE.MeshLambertMaterial({color:0xc49050});
+        const colB=new THREE.MeshLambertMaterial({color:0xaa7840});
+        for(let pi=0;pi<nPlanks;pi++){
+          const plank=new THREE.Mesh(
+            new THREE.BoxGeometry(rw-0.04, 0.04, plankW-0.015),
+            pi%2===0?colA:colB
+          );
+          plank.position.set(
+            rx+rw/2,
+            yBase+0.065,
+            rz+plankW*(pi+0.5)
+          );
+          addFP(plank,fl);
+        }
       }
 
       // Four walls
