@@ -169,6 +169,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <div id="panel-3d-header">
         <span class="ph-title">3D Preview</span>
         <span class="ph-hint">Drag to orbit · scroll to zoom</span>
+        <button class="ph-btn" id="vis-fl-0" title="Show/hide ground floor" style="border-color:rgba(255,255,255,0.4);color:#fff">G</button>
+        <button class="ph-btn" id="vis-fl-1" title="Show/hide upper floor" style="border-color:rgba(255,255,255,0.4);color:#fff">U</button>
         <button class="ph-btn" id="btn-3d-wider" title="Wider">&#x2190;&#x2192;</button>
         <button class="ph-btn" id="btn-3d-narrower" title="Narrower">&#x2192;&#x2190;</button>
         <button class="ph-btn" id="btn-3d-fullscreen" title="Fullscreen">&#x26F6;</button>
@@ -1369,6 +1371,29 @@ function updateCam3(){
   camera3.lookAt(spherical.tx, spherical.ty, spherical.tz);
 }
 
+// ── Floor visibility ──────────────────────────────────────────
+const floorVisible = {0: true, 1: true};
+
+function applyFloorVisibility() {
+  if (!scene3) return;
+  scene3.children.forEach(c => {
+    if (c.userData.fp && c.userData.floorNum !== undefined)
+      c.visible = !!floorVisible[c.userData.floorNum];
+  });
+}
+
+['0','1'].forEach(f => {
+  const btn = document.getElementById('vis-fl-' + f);
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const fl = +f;
+    floorVisible[fl] = !floorVisible[fl];
+    btn.style.opacity     = floorVisible[fl] ? '1' : '0.35';
+    btn.style.background  = floorVisible[fl] ? 'rgba(255,255,255,0.15)' : 'transparent';
+    applyFloorVisibility();
+  });
+});
+
 function rebuild3d(){
   if(!scene3)return;
   const rem=[]; scene3.children.forEach(c=>{if(c.userData.fp)rem.push(c);}); rem.forEach(c=>{scene3.remove(c);if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose();});
@@ -1399,6 +1424,15 @@ function rebuild3d(){
     if(el.type==='wall'){minX=Math.min(minX,el.x1,el.x2);minZ=Math.min(minZ,el.y1,el.y2);maxX=Math.max(maxX,el.x1,el.x2);maxZ=Math.max(maxZ,el.y1,el.y2);}
   });
   const cx=isFinite(minX)?(minX+maxX)/2/PX_PER_FT:0, cz=isFinite(minZ)?(minZ+maxZ)/2/PX_PER_FT:0;
+
+  // Tag a mesh with its floor number and respect current visibility
+  function addFP(obj, fl) {
+    obj.userData.fp = true;
+    obj.userData.floorNum = fl;
+    obj.visible = !!floorVisible[fl];
+    scene3.add(obj);
+    return obj;
+  }
 
   // Helper: Y base for a given floor
   // floorBase: base elevation for elements not inside a room
@@ -1492,9 +1526,19 @@ function rebuild3d(){
       const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
       const col=ROOM_COLORS[ri++%ROOM_COLORS.length];
 
-      // Floor slab
-      const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,FLOOR_SEP,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:fl===0?0.22:0.35}));
-      fm.position.set(rx+rw/2,yBase-FLOOR_SEP/2,rz+rh/2);fm.userData.fp=true;scene3.add(fm);
+      // Floor / ceiling slab
+      if(fl===0){
+        // Ground floor: thin translucent colored plane
+        const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18}));
+        fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
+      } else {
+        // Upper floor: solid structural slab (visible from below as ceiling, and above as floor)
+        const slab=new THREE.Mesh(new THREE.BoxGeometry(rw,FLOOR_SEP,rh),new THREE.MeshLambertMaterial({color:0xd0cbc0}));
+        slab.position.set(rx+rw/2,yBase-FLOOR_SEP/2,rz+rh/2); slab.castShadow=true; addFP(slab,fl);
+        // Warm wood floor surface on top of slab
+        const floorSurf=new THREE.Mesh(new THREE.BoxGeometry(rw,0.05,rh),new THREE.MeshLambertMaterial({color:0xc4944a}));
+        floorSurf.position.set(rx+rw/2,yBase+0.025,rz+rh/2); addFP(floorSurf,fl);
+      }
 
       // Four walls
       const wMat=new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0,side:THREE.DoubleSide});
@@ -1502,13 +1546,13 @@ function rebuild3d(){
       [{w:rw,d:wt,x:rx+rw/2,z:rz+wt/2},{w:rw,d:wt,x:rx+rw/2,z:rz+rh-wt/2},
        {w:wt,d:rh,x:rx+wt/2,z:rz+rh/2},{w:wt,d:rh,x:rx+rw-wt/2,z:rz+rh/2}].forEach(wd=>{
         const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
-        m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;m.userData.fp=true;scene3.add(m);
+        m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;addFP(m,fl);
       });
 
       // Label sprite (room name only, no sq ft)
       if(el.label){
         const sp=makeSprite(el.label,'',col);
-        sp.position.set(rx+rw/2,yBase+wallH+1.0,rz+rh/2);sp.userData.fp=true;scene3.add(sp);
+        sp.position.set(rx+rw/2,yBase+wallH+1.0,rz+rh/2);addFP(sp,fl);
       }
 
     } else if(el.type==='wall'){
@@ -1524,11 +1568,11 @@ function rebuild3d(){
       }
       const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,wThk),new THREE.MeshLambertMaterial({color:wCol,side:THREE.DoubleSide}));
       m.position.set((x1+x2)/2,yBase+wh3d/2,(z1+z2)/2);
-      m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;m.userData.fp=true;scene3.add(m);
+      m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;addFP(m,fl);
       if(el.landscape){
         const cop=new THREE.Mesh(new THREE.BoxGeometry(len+0.06,0.08,wThk+0.1),new THREE.MeshLambertMaterial({color:0xb8b0a0}));
         cop.position.set((x1+x2)/2,yBase+wh3d+0.04,(z1+z2)/2);
-        cop.rotation.y=-Math.atan2(z2-z1,x2-x1);cop.userData.fp=true;scene3.add(cop);
+        cop.rotation.y=-Math.atan2(z2-z1,x2-x1);addFP(cop,fl);
       }
 
     } else if(el.type==='door'){
@@ -1546,8 +1590,7 @@ function rebuild3d(){
       const hingOffZ = Math.sin(wallAng) * (-doorLen/2);
       dGroup.position.set(dx3 + hingOffX, yBase, dz3 + hingOffZ);
       dGroup.rotation.y = wallAng;
-      dGroup.userData.fp = true;
-      scene3.add(dGroup);
+      addFP(dGroup, fl);
 
       const doorMat  = new THREE.MeshLambertMaterial({color:0x7a5438, side:THREE.DoubleSide});
       const frameMat = new THREE.MeshLambertMaterial({color:0x9a8060, side:THREE.DoubleSide});
@@ -1626,7 +1669,7 @@ function rebuild3d(){
       glass.renderOrder = 2;
       glass.position.set(wx3, winY, wz3);
       glass.rotation.y = wAng;
-      glass.userData.fp=true; scene3.add(glass);
+      addFP(glass,fl);
 
       // Frame: same deep slab, opaque white, renders behind glass but in front of wall
       const fMat = new THREE.MeshBasicMaterial({color:0xf0ede6, side:THREE.DoubleSide});
@@ -1635,7 +1678,7 @@ function rebuild3d(){
       frameOuter.renderOrder = 1;
       frameOuter.position.set(wx3, winY, wz3);
       frameOuter.rotation.y = wAng;
-      frameOuter.userData.fp=true; scene3.add(frameOuter);
+      addFP(frameOuter,fl);
       // Inner cutout illusion: slightly smaller glass sitting inside the frame
       // (glass already renders on top via renderOrder, so this just gives frame border)
 
@@ -1644,7 +1687,7 @@ function rebuild3d(){
         const rail=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.12,0.08,frameD+0.02),fMat);
         rail.renderOrder=1;
         rail.position.set(wx3, winY+oy, wz3);
-        rail.rotation.y=wAng; rail.userData.fp=true; scene3.add(rail);
+        rail.rotation.y=wAng; addFP(rail,fl);
       });
       // Vertical stiles (left and right)
       [-0.5,0.5].forEach(frac=>{
@@ -1653,23 +1696,23 @@ function rebuild3d(){
         const stile=new THREE.Mesh(new THREE.BoxGeometry(0.09,winH+0.12,frameD+0.02),fMat);
         stile.renderOrder=1;
         stile.position.set(sx,winY,sz);
-        stile.rotation.y=wAng; stile.userData.fp=true; scene3.add(stile);
+        stile.rotation.y=wAng; addFP(stile,fl);
       });
       // Centre mullion
       const mull=new THREE.Mesh(new THREE.BoxGeometry(0.07,winH,frameD+0.02),fMat);
       mull.renderOrder=1;
       mull.position.set(wx3,winY,wz3);
-      mull.rotation.y=wAng; mull.userData.fp=true; scene3.add(mull);
+      mull.rotation.y=wAng; addFP(mull,fl);
       // Sill ledge (outside only — protrudes outward from wall face)
       const sill=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.25,0.06,0.18),fMat);
       sill.renderOrder=1;
       sill.position.set(wx3, yBase+sillH-0.03, wz3);
-      sill.rotation.y=wAng; sill.userData.fp=true; scene3.add(sill);
+      sill.rotation.y=wAng; addFP(sill,fl);
 
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
       const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
-      const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; G.userData.fp=true; scene3.add(G);
+      const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; addFP(G,fl);
       const mat=(col,rough=0.8)=>new THREE.MeshLambertMaterial({color:col});
       const box3=(w,h,d,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col));m.position.set(x,y,z);m.castShadow=true;G.add(m);return m;};
       const cyl3=(r,h,col,x=0,y=0,z=0,segs=12)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,segs),mat(col));m.position.set(x,y,z);G.add(m);return m;};
@@ -1935,11 +1978,37 @@ function rebuild3d(){
         for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
 
       } else if(t==='graded-area'){
-        box3(fw,0.18,fh,0xc8c0a8,0,0.09,0); // flat platform
+        box3(fw,0.18,fh,0xc8c0a8,0,0.09,0);
         const retH=Math.max(0.3, Math.abs(slopeOffset(fx2,fz2-fh/2)-slopeOffset(fx2,fz2+fh/2))+0.5);
         box3(fw,retH,0.35,0x9a9080,0,0.18+retH/2,-fh/2);
         box3(fw+0.1,0.12,0.45,0xb0a890,0,0.18+retH+0.06,-fh/2);
         box3(fw,retH*0.6,fh*0.15,0x7a6040,0,0.18+retH*0.3,-fh/2+fh*0.075);
+
+      } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
+        const stairH=wallH, stairW=fw, treadD=fh;
+        if(t==='stairs-straight'){
+          const nTreads=Math.max(4,Math.round(treadD*3));
+          const riserH=stairH/nTreads, tD=treadD/nTreads;
+          for(let i=0;i<nTreads;i++) box3(stairW,riserH*(i+1),tD,0xd4c8a8,0,riserH*(i+1)/2,-treadD/2+tD*(i+0.5));
+          box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
+          box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
+        } else if(t==='stairs-landing'){
+          const landH=stairH/2, nT=Math.max(3,Math.round(treadD*1.5));
+          const tD=treadD/2/nT, rH=landH/nT;
+          for(let i=0;i<nT;i++) box3(stairW,rH*(i+1),tD,0xd4c8a8,0,rH*(i+1)/2,-treadD/2+tD*(i+0.5));
+          box3(stairW,0.15,stairW,0xc8c0a8,0,landH+0.075,0);
+          for(let i=0;i<nT;i++) box3(stairW,landH+rH*(i+1),tD,0xd4c8a8,0,(landH+rH*(i+1))/2,tD*(i+0.5));
+          box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
+          box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
+        } else {
+          const halfH=stairH/2, nT=Math.max(3,Math.round(fh/2*2));
+          const tD=fh/2/nT, rH=halfH/nT;
+          for(let i=0;i<nT;i++) box3(fw/2,rH*(i+1),tD,0xd4c8a8,-fw/4,rH*(i+1)/2,-fh/2+tD*(i+0.5));
+          box3(fw/2,0.15,fw/2,0xc8c0a8,-fw/4,halfH+0.075,0);
+          const tD2=fw/2/nT;
+          for(let i=0;i<nT;i++) box3(tD2,halfH+rH*(i+1),fh/2,0xd4c8a8,-fw/2+tD2*(i+0.5),(halfH+rH*(i+1))/2,fh/4);
+        }
+
       } else {
         // generic fallback box
         box3(fw,0.5,fh,0x888888,0,0.25,0);
@@ -1968,6 +2037,7 @@ function rebuild3d(){
   if(slopeRad>0.001) dirt.rotateOnWorldAxis(slopeAxis,slopeRad);
   dirt.position.y=-4.04;
   dirt.userData.fp=true;scene3.add(dirt);
+  applyFloorVisibility();
 }
 
 function makeSprite(title,sub,color){
