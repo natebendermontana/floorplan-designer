@@ -532,6 +532,7 @@ function drawWindow(el, sel) {
   const dark=isDark(), len=el.len||PX_PER_FT*4;
   ctx.globalAlpha=floorAlpha(el);
   ctx.save(); ctx.translate(el.x,el.y); ctx.rotate(el.angle||0);
+  if(el.flip) ctx.scale(-1,1);
   ctx.strokeStyle=sel?'#60A5FA':(dark?'#93C5FD':'#1D4ED8');
   ctx.lineWidth=6; ctx.lineCap='butt';
   ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
@@ -545,6 +546,7 @@ function drawDoor(el, sel) {
   const dark=isDark(), len=el.len||PX_PER_FT*3;
   ctx.globalAlpha=floorAlpha(el);
   ctx.save(); ctx.translate(el.x,el.y); ctx.rotate(el.angle||0);
+  if(el.flip) ctx.scale(-1,1);
   ctx.strokeStyle=sel?'#3B82F6':(dark?'#F0997B':'#D85A30');
   ctx.lineWidth=6; ctx.lineCap='round';
   ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
@@ -564,7 +566,7 @@ const FDEFS={
   'crib':        {w:2.5,h:4.5, label:'Crib'},
   // Stairs (width × run-length in ft)
   'stairs-straight': {w:4, h:10, label:'Straight stairs'},
-  'stairs-landing':  {w:4, h:12, label:'Stairs w/ landing'},
+  'stairs-landing':  {w:8, h:12, label:'Stairs w/ landing'},
   'stairs-l':        {w:8, h:8,  label:'L-shaped stairs'},
   // Seating
   'sofa':        {w:7,  h:3,   label:'Sofa'},
@@ -606,6 +608,7 @@ function drawFurniture(el, sel) {
   const dark=isDark(), pw=el.fw*PX_PER_FT, ph=el.fh*PX_PER_FT, t=el.ftype;
   ctx.globalAlpha=floorAlpha(el);
   ctx.save(); ctx.translate(el.x,el.y); ctx.rotate(el.angle||0);
+  if(el.flip) ctx.scale(-1,1);
   const fill=dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.06)';
   const stroke=sel?'#3B82F6':(dark?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.5)');
   ctx.fillStyle=fill; ctx.strokeStyle=stroke; ctx.lineWidth=sel?2:1.5;
@@ -829,24 +832,36 @@ function drawFurniture(el, sel) {
     ctx.fillStyle=dark?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.4)';ctx.fillText('UP',0,-ph/2+3);
 
   } else if(t==='stairs-landing'){
-    // Two runs separated by a landing platform
-    const landH=ph*0.18, run=( ph-landH)*0.5;
+    // Switchback: two runs side-by-side with full-width landing between them
+    const runW=pw/2, landH=ph*0.16, runH=(ph-landH)*0.5;
+    const nT=Math.max(3,Math.round(runH/(PX_PER_FT*0.75)));
+    const stk=dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.28)';
     box(-pw/2,-ph/2,pw,ph);
-    // Landing highlighted
-    ctx.fillStyle=dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.07)';
-    ctx.fillRect(-pw/2,-ph/2+run,pw,landH);
-    const nT=Math.max(3,Math.round(run/(PX_PER_FT*0.75)));
-    ctx.strokeStyle=dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.28)'; ctx.lineWidth=0.8;
-    for(let i=1;i<nT;i++){const y=-ph/2+run*i/nT;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(pw/2,y);ctx.stroke();}
-    for(let i=1;i<nT;i++){const y=-ph/2+run+landH+run*i/nT;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(pw/2,y);ctx.stroke();}
-    ctx.font=`bold ${Math.min(9,pw*0.2)}px -apple-system,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillStyle=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.38)';
-    ctx.fillText('LAND',0,-ph/2+run+landH/2);
-    // Arrow
+    // Centre divider between the two runs
+    ctx.strokeStyle=stk; ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,-ph/2);ctx.lineTo(0,-ph/2+runH);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,-ph/2+runH+landH);ctx.lineTo(0,ph/2);ctx.stroke();
+    // Landing band
+    ctx.fillStyle=dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.07)';
+    ctx.fillRect(-pw/2,-ph/2+runH,pw,landH);
+    ctx.strokeStyle=stk; ctx.lineWidth=1; ctx.strokeRect(-pw/2,-ph/2+runH,pw,landH);
+    // Tread lines run 1 (left)
+    ctx.strokeStyle=stk; ctx.lineWidth=0.8;
+    for(let i=1;i<nT;i++){const y=-ph/2+runH*i/nT;ctx.beginPath();ctx.moveTo(-pw/2,y);ctx.lineTo(0,y);ctx.stroke();}
+    // Tread lines run 2 (right)
+    for(let i=1;i<nT;i++){const y=-ph/2+runH*i/nT;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(pw/2,y);ctx.stroke();}
+    // Landing label
+    ctx.font=`bold ${Math.min(9,runW*0.15)}px -apple-system,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=dark?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.4)';
+    ctx.fillText('LANDING',0,-ph/2+runH+landH/2);
+    // UP arrow run 1, DN arrow run 2
     ctx.strokeStyle=dark?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.5)'; ctx.lineWidth=1.5;
-    const ay2=ph/2-ph*0.08;
-    ctx.beginPath();ctx.moveTo(0,-ph/2+ph*0.06);ctx.lineTo(0,ay2);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(-pw*0.18,ay2-ph*0.12);ctx.lineTo(0,ay2);ctx.lineTo(pw*0.18,ay2-ph*0.12);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-runW/2,-ph/2+runH*0.12);ctx.lineTo(-runW/2,-ph/2+runH*0.85);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-runW/2-runW*0.2,-ph/2+runH*0.74);ctx.lineTo(-runW/2,-ph/2+runH*0.85);ctx.lineTo(-runW/2+runW*0.2,-ph/2+runH*0.74);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runW/2,-ph/2+runH*0.85);ctx.lineTo(runW/2,-ph/2+runH*0.12);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runW/2-runW*0.2,-ph/2+runH*0.24);ctx.lineTo(runW/2,-ph/2+runH*0.12);ctx.lineTo(runW/2+runW*0.2,-ph/2+runH*0.24);ctx.stroke();
+    ctx.font=`bold ${Math.min(8,runW*0.14)}px -apple-system,sans-serif`;ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText('UP',-runW/2,-ph/2+2); ctx.fillText('DN',runW/2,-ph/2+2);
 
   } else if(t==='stairs-l'){
     // First run vertical, second run horizontal (L-shape)
@@ -1193,7 +1208,11 @@ function updateProps() {
     html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="1" max="20" step="0.5"'));
     html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
   }
-  else if(el.type==='furniture'){html+=row('Type',val(FDEFS[el.ftype]?.label||el.ftype));html+=row('Width (ft)',inp('pe-fw','number',el.fw,'min="1" max="30" step="0.5"'));html+=row('Depth (ft)',inp('pe-fh','number',el.fh,'min="1" max="30" step="0.5"'));html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));}
+  else if(el.type==='furniture'){html+=row('Type',val(FDEFS[el.ftype]?.label||el.ftype));
+    html+=row('Width (ft)',inp('pe-fw','number',el.fw,'min="1" max="30" step="0.5"'));
+    html+=row('Depth (ft)',inp('pe-fh','number',el.fh,'min="1" max="30" step="0.5"'));
+    html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
+    html+=row('Mirror','<button id="pe-flip" style="padding:3px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:'+(el.flip?'var(--bg2)':'transparent')+';color:'+(el.flip?'var(--accent)':'var(--text2)')+';cursor:pointer;font-size:11px">'+(el.flip?'&#x21D4; Flipped':'&#x21D4; Flip')+'</button>');}
   html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
   html+=`<button class="del-btn" id="pe-del">Delete</button>`;
   pane.innerHTML=html;
@@ -1207,6 +1226,14 @@ function updateProps() {
   bind('pe-dtype',e=>{el.dtype=e.target.value;render2d();});
   bind('pe-wtype',e=>{el.wtype=e.target.value;render2d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
+  const _flipBtn=document.getElementById('pe-flip');
+  if(_flipBtn) _flipBtn.addEventListener('click',()=>{
+    el.flip=!el.flip;
+    _flipBtn.style.background=el.flip?'var(--bg2)':'transparent';
+    _flipBtn.style.color=el.flip?'var(--accent)':'var(--text2)';
+    _flipBtn.innerHTML=el.flip?'&#x21D4; Flipped':'&#x21D4; Flip';
+    render2d(); if(panel3dOpen)rebuild3d();
+  });
   // Wall face toggle buttons
   ['N','S','E','W'].forEach(key=>{
     const btn=document.getElementById('pe-wall-'+key);
@@ -1869,7 +1896,7 @@ function rebuild3d(){
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
       const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
-      const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; addFP(G,fl);
+      const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; if(el.flip)G.scale.x=-1; addFP(G,fl);
       const mat=(col,rough=0.8)=>new THREE.MeshLambertMaterial({color:col});
       const box3=(w,h,d,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col));m.position.set(x,y,z);m.castShadow=true;G.add(m);return m;};
       const cyl3=(r,h,col,x=0,y=0,z=0,segs=12)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,segs),mat(col));m.position.set(x,y,z);G.add(m);return m;};
@@ -2150,13 +2177,24 @@ function rebuild3d(){
           box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
           box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
         } else if(t==='stairs-landing'){
-          const landH=stairH/2, nT=Math.max(3,Math.round(treadD*1.5));
-          const tD=treadD/2/nT, rH=landH/nT;
-          for(let i=0;i<nT;i++) box3(stairW,rH*(i+1),tD,0xd4c8a8,0,rH*(i+1)/2,-treadD/2+tD*(i+0.5));
-          box3(stairW,0.15,stairW,0xc8c0a8,0,landH+0.075,0);
-          for(let i=0;i<nT;i++) box3(stairW,landH+rH*(i+1),tD,0xd4c8a8,0,(landH+rH*(i+1))/2,tD*(i+0.5));
-          box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
-          box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
+          // Switchback: run1 in left half, full-width landing, run2 in right half (reversed)
+          const runW=stairW/2;
+          const landDepth=treadD*0.16;
+          const runDepth=(treadD-landDepth)/2;
+          const nT=Math.max(3,Math.round(runDepth*2.5));
+          const rH=stairH/2/nT, tD=runDepth/nT;
+          // Run 1 — left half, steps go in +Z
+          for(let i=0;i<nT;i++)
+            box3(runW, rH*(i+1), tD, 0xd4c8a8, -runW/2, rH*(i+1)/2, -treadD/2+tD*(i+0.5));
+          // Full-width landing slab
+          box3(stairW, 0.2, landDepth, 0xc8c0a8, 0, stairH/2+0.1, -treadD/2+runDepth+landDepth/2);
+          // Run 2 — right half, continues from landing height in same +Z
+          for(let i=0;i<nT;i++)
+            box3(runW, stairH/2+rH*(i+1), tD, 0xd4c8a8, runW/2, (stairH/2+rH*(i+1))/2, -treadD/2+runDepth+landDepth+tD*(i+0.5));
+          // Outer stringers and centre divider
+          box3(0.06, stairH, treadD, 0x8a6a40, -stairW/2+0.04, stairH/2, 0);
+          box3(0.06, stairH, treadD, 0x8a6a40,  stairW/2-0.04, stairH/2, 0);
+          box3(0.06, stairH, treadD, 0x9a7a50, 0, stairH/2, 0);
         } else {
           const halfH=stairH/2, nT=Math.max(3,Math.round(fh/2*2));
           const tD=fh/2/nT, rH=halfH/nT;
