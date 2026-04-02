@@ -250,6 +250,16 @@ new ResizeObserver(resize).observe(wrap);
 // HELPERS
 // ══════════════════════════════════════════════════
 const snap = v => { const s=SNAP(); return Math.round(v/s)*s; };
+
+function switchToSelect(newEl) {
+  tool = 'select';
+  document.querySelectorAll('[data-tool].tool-btn,[data-tool].tool-tile').forEach(b=>b.classList.remove('active'));
+  const selBtn = document.querySelector('[data-tool="select"]');
+  if (selBtn) selBtn.classList.add('active');
+  document.getElementById('st-tool').textContent = 'Tool: select';
+  document.getElementById('st-hint').textContent = hints['select']||'';
+  if (newEl) { selected = newEl; multiSel = []; updateProps(); }
+}
 const snapPt = (x,y) => ({x:snap(x), y:snap(y)});
 const isDark = () => window.matchMedia('(prefers-color-scheme:dark)').matches;
 const dl = (blob,name) => { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); };
@@ -1022,15 +1032,18 @@ canvas2d.addEventListener('mousedown',e=>{
   const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
   if(DOOR_TOOLS.includes(tool)){
     const defLen={'door':3,'double-door':5,'sliding-door':4,'pocket-door':3};
-    saveHistory();elements.push({type:'door',dtype:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(defLen[tool]||3),angle:0,floor:currentFloor});render2d();return;
+    const newDoor={type:'door',dtype:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(defLen[tool]||3),angle:0,floor:currentFloor};
+    saveHistory();elements.push(newDoor);switchToSelect(newDoor);render2d();return;
   }
   if(WIN_TOOLS.includes(tool)){
     const defLen={'window':4,'picture-window':5,'bay-window':5,'skylight':3};
-    saveHistory();elements.push({type:'window',wtype:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(defLen[tool]||4),angle:0,floor:currentFloor});render2d();return;
+    const newWin={type:'window',wtype:tool,x:sp.x,y:sp.y,len:PX_PER_FT*(defLen[tool]||4),angle:0,floor:currentFloor};
+    saveHistory();elements.push(newWin);switchToSelect(newWin);render2d();return;
   }
   if(FDEFS[tool]){
     const d=FDEFS[tool];saveHistory();
-    elements.push({type:'furniture',ftype:tool,x:sp.x,y:sp.y,fw:d.w,fh:d.h,angle:0,floor:currentFloor});render2d();return;
+    const newFur={type:'furniture',ftype:tool,x:sp.x,y:sp.y,fw:d.w,fh:d.h,angle:0,floor:currentFloor};
+    elements.push(newFur);switchToSelect(newFur);render2d();return;
   }
   if(tool==='select'){
     if(selected){const h=hitHandle(selected,x,y);if(h){activeHandle={type:h.type,role:h.role,el:selected,origin:JSON.parse(JSON.stringify(selected)),mouseStart:{x,y}};return;}}
@@ -1051,12 +1064,14 @@ canvas2d.addEventListener('mouseup',e=>{
   const sp=snapPt(x,y);
   if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'){
     if(Math.hypot(sp.x-previewStart.x,sp.y-previewStart.y)>4){
-      saveHistory();elements.push({type:'wall',x1:previewStart.x,y1:previewStart.y,x2:sp.x,y2:sp.y,thickness:tool==='landscape-wall'?5:8,floor:currentFloor,half:tool==='half-wall',landscape:tool==='landscape-wall'});
+      const newWall={type:'wall',x1:previewStart.x,y1:previewStart.y,x2:sp.x,y2:sp.y,thickness:tool==='landscape-wall'?5:8,floor:currentFloor,half:tool==='half-wall',landscape:tool==='landscape-wall'};
+      saveHistory();elements.push(newWall);switchToSelect(newWall);
     }
   } else if(tool==='room'){
     const rw=Math.abs(sp.x-previewStart.x),rh=Math.abs(sp.y-previewStart.y);
     if(rw>SNAP()&&rh>SNAP()){
-      saveHistory();elements.push({type:'room',x:Math.min(previewStart.x,sp.x),y:Math.min(previewStart.y,sp.y),w:rw,h:rh,label:'',floor:currentFloor});
+      const newRoom={type:'room',x:Math.min(previewStart.x,sp.x),y:Math.min(previewStart.y,sp.y),w:rw,h:rh,label:'',floor:currentFloor};
+      saveHistory();elements.push(newRoom);switchToSelect(newRoom);
     }
   }
   drawing=false;previewStart=null;previewEnd=null;
