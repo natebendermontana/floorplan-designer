@@ -1675,6 +1675,9 @@ function rebuild3d(){
     } else if(el.type==='furniture'&&OUTDOOR_FTYPES.includes(el.ftype)){
       // Outdoor elements sit on pure terrain — never on a floor platform
       yBase=slopeOffset(_ecx3,_ecz3);
+    } else if(el.type==='furniture'&&el.ftype==='floor-cutout'){
+      // Floor cutout must always sit at its floor's base elevation, not terrain
+      yBase=floorBase(fl)+slopeOffset(_ecx3,_ecz3);
     } else if(el.type==='furniture'||el.type==='door'||el.type==='window'){
       yBase=containingRoomElev(el.x,el.y,fl)??terrainYBase;
     } else if(el.type==='wall'&&el.landscape){
@@ -1697,22 +1700,57 @@ function rebuild3d(){
         const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18}));
         fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
       } else {
-        // Upper floor structural slab — concrete, acts as ceiling for ground floor below.
-        // Tagged floor 0 so it stays visible when ground floor is shown; also tagged fl so
-        // it hides with the upper floor. We tag it as a special "both floors" mesh.
-        const slab=new THREE.Mesh(new THREE.BoxGeometry(rw,FLOOR_SEP,rh),
-          new THREE.MeshLambertMaterial({color:0xd4cfc4}));
-        slab.position.set(rx+rw/2,yBase-FLOOR_SEP/2,rz+rh/2);
-        slab.castShadow=true; slab.receiveShadow=true;
-        addFP(slab,fl);
+        // Upper floor — render slab and wood base with true rectangular cutouts.
+        // Find cutouts that overlap this room (in 2D canvas coordinates).
+        const roomCutouts = floorCutouts.filter(fc => {
+          if((fc.floor||0) !== fl) return false;
+          // Check overlap between room rect and cutout rect
+          const fcx1=fc.x-fc.fw*PX_PER_FT/2, fcx2=fc.x+fc.fw*PX_PER_FT/2;
+          const fcy1=fc.y-fc.fh*PX_PER_FT/2, fcy2=fc.y+fc.fh*PX_PER_FT/2;
+          return fcx1<el.x+el.w && fcx2>el.x && fcy1<el.y+el.h && fcy2>el.y;
+        });
 
-        // Wood floor surface — sits right on top of the slab at yBase.
-        // One solid base layer in warm oak colour.
-        const floorBase2=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),
-          new THREE.MeshLambertMaterial({color:0xb8864a}));
-        floorBase2.position.set(rx+rw/2,yBase+0.03,rz+rh/2);
-        floorBase2.receiveShadow=true;
-        addFP(floorBase2,fl);
+        // Helper: render a solid rectangle of the floor slab/base,
+        // clipped to the room bounds, with holes cut out for each cutout.
+        // We approximate by rendering 4 strips around each cutout.
+        // For simplicity, handle at most one cutout per room (most common case).
+        // Convert cutout to 3D coords relative to scene centre.
+        const slabMat  = new THREE.MeshLambertMaterial({color:0xd4cfc4});
+        const baseMat  = new THREE.MeshLambertMaterial({color:0xb8864a});
+
+        function addSlabRect(x3, z3, w3, d3) {
+          // Concrete slab
+          const s=new THREE.Mesh(new THREE.BoxGeometry(w3,FLOOR_SEP,d3),slabMat);
+          s.position.set(x3,yBase-FLOOR_SEP/2,z3); s.castShadow=true; s.receiveShadow=true;
+          addFP(s,fl);
+          // Wood base layer
+          const b=new THREE.Mesh(new THREE.BoxGeometry(w3,0.06,d3),baseMat);
+          b.position.set(x3,yBase+0.03,z3); b.receiveShadow=true;
+          addFP(b,fl);
+        }
+
+        if(roomCutouts.length===0){
+          // No cutouts — render full slab
+          addSlabRect(rx+rw/2, rz+rh/2, rw, rh);
+        } else {
+          // One cutout: render 4 border strips around it.
+          // Clamp cutout to room bounds in 3D units.
+          const fc=roomCutouts[0];
+          const fcx1=Math.max(el.x, fc.x-fc.fw*PX_PER_FT/2)/PX_PER_FT-cx;
+          const fcx2=Math.min(el.x+el.w, fc.x+fc.fw*PX_PER_FT/2)/PX_PER_FT-cx;
+          const fcz1=Math.max(el.y, fc.y-fc.fh*PX_PER_FT/2)/PX_PER_FT-cz;
+          const fcz2=Math.min(el.y+el.h, fc.y+fc.fh*PX_PER_FT/2)/PX_PER_FT-cz;
+          const rx2=rx+rw, rz2=rz+rh;
+
+          // North strip (z < cutout)
+          if(fcz1-rz > 0.05) addSlabRect(rx+rw/2, (rz+fcz1)/2, rw, fcz1-rz);
+          // South strip (z > cutout)
+          if(rz2-fcz2 > 0.05) addSlabRect(rx+rw/2, (fcz2+rz2)/2, rw, rz2-fcz2);
+          // West strip (x < cutout), middle Z band
+          if(fcx1-rx > 0.05) addSlabRect((rx+fcx1)/2, (fcz1+fcz2)/2, fcx1-rx, fcz2-fcz1);
+          // East strip (x > cutout), middle Z band
+          if(rx2-fcx2 > 0.05) addSlabRect((fcx2+rx2)/2, (fcz1+fcz2)/2, rx2-fcx2, fcz2-fcz1);
+        }
 
         // Hardwood planks — skip planks that fall inside a floor-cutout
         const nPlanks=Math.max(3,Math.round(rh/0.25));
@@ -2275,21 +2313,22 @@ function rebuild3d(){
         }
 
       } else if(t==='floor-cutout'){
-        // Render a dark recessed plane to show the void/hole in the floor
-        // Sits just below the floor surface level (at y=0 relative to group = yBase)
-        const voidMat=new THREE.MeshLambertMaterial({color:0x111118,side:THREE.DoubleSide});
+        // Render a very dark plane at floor level — the slab hole lets you see through.
+        // The plane sits at yBase (group origin) so it's flush with the floor opening.
+        const voidMat=new THREE.MeshLambertMaterial({color:0x0a0a12,side:THREE.DoubleSide});
         const voidPlane=new THREE.Mesh(new THREE.PlaneGeometry(fw,fh),voidMat);
         voidPlane.rotation.x=-Math.PI/2;
-        voidPlane.position.set(0,-0.02,0);
+        voidPlane.position.set(0,0,0); // at yBase — just below the floor surface
         G.add(voidPlane);
-        // Also render a slightly visible edge border
-        const edgeMat=new THREE.MeshLambertMaterial({color:0x4a3020});
-        [[fw,0.08,0.08,0,0.04,0],[fw,0.08,0.08,0,0.04,0],
-         [0.08,0.08,fh,-fw/2+0.04,0.04,0],[0.08,0.08,fh,fw/2-0.04,0.04,0]].forEach(([w,h,d,x,y,z],idx)=>{
-          if(idx===0)z=-fh/2+0.04;
-          if(idx===1)z=fh/2-0.04;
-          const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),edgeMat);
-          e.position.set(x,y,z);G.add(e);
+        // Thin dark border around the opening edge
+        const edgeMat=new THREE.MeshLambertMaterial({color:0x3a2a18});
+        const edgeH=FLOOR_SEP+0.08;
+        [{w:fw,  d:0.06,x:0,       z:-fh/2},
+         {w:fw,  d:0.06,x:0,       z: fh/2},
+         {w:0.06,d:fh,  x:-fw/2,   z:0},
+         {w:0.06,d:fh,  x: fw/2,   z:0}].forEach(({w,d,x,z})=>{
+          const e=new THREE.Mesh(new THREE.BoxGeometry(w,edgeH,d),edgeMat);
+          e.position.set(x,-edgeH/2,z); G.add(e);
         });
       } else {
         // generic fallback box
