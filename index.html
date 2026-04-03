@@ -2177,47 +2177,55 @@ function rebuild3d(){
           box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
           box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
         } else if(t==='stairs-landing'){
-          // Free-floating switchback stairs — treads and landing slab only, no fill.
+          // Switchback stairs — free-floating tread slabs only, no fill.
           //
-          // fw=8, fh=12 (default).  runW = fw/2 = 4ft per run.
-          // Z layout: [Run1: zBot→zR1end] [Landing: zR1end→zR2start] [Run2: zR2start→zTop]
-          // Run 1 (x centre = -runW/2): treads travel +Z, y rises 0 → stairH/2
-          // Run 2 (x centre = +runW/2): treads travel -Z (reversed), y rises stairH/2 → stairH
+          // Top-down plan:
+          //   ┌────────┬────────┐   ← zBot (near edge, both runs start here)
+          //   │ Run 1  │ Run 2  │
+          //   │ x<0    │ x>0    │
+          //   │ rise↑  │ rise↑  │   (both climb toward the landing)
+          //   │ →→→→→  │ ←←←←←  │   (run1 travels +Z, run2 travels -Z toward landing)
+          //   ├────────┴────────┤   ← zLand (far edge, landing sits here)
+          //   │    LANDING      │
+          //   └─────────────────┘
+          //
+          // Run 1 (left, x = -runW/2): treads at z = zBot..zLand, travel +Z, rise 0→stairH/2
+          // Run 2 (right, x = +runW/2): treads at z = zBot..zLand, travel -Z (from zLand back),
+          //                              rise stairH/2→stairH
+          // Landing (full width): sits at z = zLand..zTop, height = stairH/2
 
-          const runW   = stairW / 2;               // 4 ft
-          const landD  = runW;                     // landing depth = one run width (square-ish)
-          const runD   = (treadD - landD) / 2;     // depth for each run
+          const runW   = stairW / 2;
+          const landD  = runW;                      // landing is square (runW × runW)
+          const runD   = treadD - landD;            // both runs share same Z range (zBot→zLand)
           const nT     = Math.max(4, Math.round(runD * 2.5));
-          const rH     = (stairH / 2) / nT;        // riser height per step
-          const tSlabH = Math.max(0.06, rH * 0.18); // tread slab thickness
-          const tD     = runD / nT;                // tread horizontal depth
+          const rH     = (stairH / 2) / nT;
+          const tSlabH = Math.max(0.06, rH * 0.18);
+          const tD     = runD / nT;
 
-          const zBot     = -treadD / 2;
-          const zR1end   = zBot + runD;
-          const zR2start = zR1end + landD;
-          const zTop     = zR2start + runD;        // = +treadD/2
+          const zBot  = -treadD / 2;               // near edge — bottom of both runs
+          const zLand = zBot + runD;               // far edge of runs = near edge of landing
+          const zTop  = zLand + landD;             // far edge of landing = far edge of footprint
 
           const treadC = 0xe0d8c0;
 
-          // ── Run 1: left half, +Z direction ───────────────────────────────────
+          // ── Run 1: left half (x<0), marches +Z from zBot toward zLand ─────────
           for(let i = 0; i < nT; i++){
-            const y = rH * i;                      // tread top surface y
-            const z = zBot + tD * (i + 0.5);      // tread centre z
+            const y = rH * i;
+            const z = zBot + tD * (i + 0.5);
             box3(runW, tSlabH, tD, treadC, -runW/2, y + tSlabH/2, z);
           }
 
-          // ── Landing: full width (stairW), flat slab at stairH/2 ──────────────
-          box3(stairW, tSlabH, landD, treadC, 0, stairH/2 + tSlabH/2, zR1end + landD/2);
-
-          // ── Run 2: right half, -Z direction (reversed) ───────────────────────
-          // Tread 0 is nearest zTop (far end), tread nT-1 is nearest the landing.
-          // y increases from stairH/2 as you go away from landing (i.e. toward zTop).
-          // Person walks from landing at zR2start toward zTop, rising each step.
+          // ── Run 2: right half (x>0), marches -Z from zLand back toward zBot ───
+          // Tread i=0 is adjacent to the landing (at zLand), rising from stairH/2.
+          // Each subsequent tread steps back toward zBot and rises further.
           for(let i = 0; i < nT; i++){
-            const y = stairH/2 + rH * i;          // tread top surface y (rises away from landing)
-            const z = zTop - tD * (i + 0.5);      // tread centre z (steps from zTop back toward zR2start)
+            const y = stairH/2 + rH * i;
+            const z = zLand - tD * (i + 0.5);     // starts near zLand, marches toward zBot
             box3(runW, tSlabH, tD, treadC, runW/2, y + tSlabH/2, z);
           }
+
+          // ── Landing: full width at zLand, height = stairH/2 ───────────────────
+          box3(stairW, tSlabH, landD, treadC, 0, stairH/2 + tSlabH/2, zLand + landD/2);
 
         } else {
           const halfH=stairH/2, nT=Math.max(3,Math.round(fh/2*2));
