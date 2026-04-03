@@ -1616,7 +1616,7 @@ function rebuild3d(){
   // If not set, it defaults to the terrain height at the room's centre.
   // This makes the system transparent: user can read and edit elevation directly.
 
-  const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area'];
+  const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed'];
   const floorCutouts=elements.filter(e=>e.type==='furniture'&&e.ftype==='floor-cutout');
 
   // Compute terrain Y at a canvas-px position
@@ -1624,11 +1624,11 @@ function rebuild3d(){
     return slopeOffset(px2d/PX_PER_FT-cx, py2d/PX_PER_FT-cz);
   }
 
-  // Resolve a ground-floor room's Y elevation
+  // Resolve a ground-floor room's Y elevation.
+  // Default is 0 (flat ground) — the terrain slopes around/beneath rooms.
+  // User can set room.elevation explicitly to place a room on a hillside pad.
   function groundRoomElev(room){
-    if(room.elevation!=null) return room.elevation;
-    // Default: terrain at room centre
-    return terrainAt(room.x+room.w/2, room.y+room.h/2);
+    return room.elevation ?? 0;
   }
 
   // Find ground-floor room with most 2D overlap with a given rect
@@ -1675,8 +1675,11 @@ function rebuild3d(){
     let yBase;
     if(el.type==='room'){
       yBase=roomElev(el);
+    } else if(el.type==='furniture'&&el.ftype==='graded-area'){
+      // Graded area sits at its explicit elevation, or terrain at its centre
+      yBase = el.elevation ?? terrainAt(el.x, el.y);
     } else if(el.type==='furniture'&&(OUTDOOR_FTYPES.includes(el.ftype)||el.ftype==='floor-cutout')){
-      // Outdoor + cutout: follow terrain (cutout's floor-level comes from its fl)
+      // Outdoor + cutout: follow terrain
       const base = fl===1 ? (()=>{
         const below=bestGroundRoomBelow(el.x,el.y,1,1);
         return below ? groundRoomElev(below)+wallH+FLOOR_SEP : slopeOffset(ex3,ez3);
@@ -1702,9 +1705,22 @@ function rebuild3d(){
 
       // Floor / ceiling slab
       if(fl===0){
-        // Ground floor: thin translucent colored plane
+        // Ground floor: translucent colored plane + opaque foundation fill
+        // that drops from yBase down to terrain, hiding the slope inside rooms.
         const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18}));
         fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
+
+        // Foundation fill: opaque concrete slab from yBase down to the lowest
+        // terrain corner, so the slope is never visible inside the room footprint.
+        const corners=[[rx,rz],[rx+rw,rz],[rx,rz+rh],[rx+rw,rz+rh]];
+        const lowestTerrain=Math.min(...corners.map(([x,z])=>slopeOffset(x,z)));
+        const foundH=Math.max(0.05, yBase-lowestTerrain+0.05);
+        if(foundH>0.05){
+          const foundMat=new THREE.MeshLambertMaterial({color:0xb8b0a0});
+          const found=new THREE.Mesh(new THREE.BoxGeometry(rw,foundH,rh),foundMat);
+          found.position.set(rx+rw/2, yBase-foundH/2, rz+rh/2);
+          found.receiveShadow=true; addFP(found,fl);
+        }
       } else {
         // Upper floor — render slab and wood base, with rectangular holes for floor-cutouts.
         // Find cutouts overlapping this room (canvas pixel coords).
@@ -2222,11 +2238,37 @@ function rebuild3d(){
         for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
 
       } else if(t==='graded-area'){
-        box3(fw,0.18,fh,0xc8c0a8,0,0.09,0);
-        const retH=Math.max(0.3, Math.abs(slopeOffset(fx2,fz2-fh/2)-slopeOffset(fx2,fz2+fh/2))+0.5);
-        box3(fw,retH,0.35,0x9a9080,0,0.18+retH/2,-fh/2);
-        box3(fw+0.1,0.12,0.45,0xb0a890,0,0.18+retH+0.06,-fh/2);
-        box3(fw,retH*0.6,fh*0.15,0x7a6040,0,0.18+retH*0.3,-fh/2+fh*0.075);
+        // Flat concrete pad at yBase (el.elevation or terrain at centre)
+        const padH=0.2;
+        box3(fw, padH, fh, 0xc8c0b0, 0, padH/2, 0);  // concrete slab
+
+        // Retaining walls: hang down from pad level to terrain on each of 4 sides.
+        // fx2/fz2 are 3D coords of element centre. Convert edge midpoints to 3D.
+        const edgePad=0.06;  // wall thickness
+        const wallCol=0x9a8878, copingCol=0xb0a090;
+
+        // For each edge, compute how far down the terrain is at that edge midpoint
+        // compared to this pad's yBase. That's how tall the retaining wall needs to be.
+        const edges=[
+          // {axis, dir, edgeMidX3, edgeMidZ3, wallW, wallD}
+          {label:'N', x3:0,        z3:-fh/2, ww:fw, wd:edgePad},
+          {label:'S', x3:0,        z3: fh/2, ww:fw, wd:edgePad},
+          {label:'W', x3:-fw/2,    z3:0,     ww:edgePad, wd:fh},
+          {label:'E', x3: fw/2,    z3:0,     ww:edgePad, wd:fh},
+        ];
+        edges.forEach(({x3,z3,ww,wd})=>{
+          // Terrain Y at this edge in world coords
+          const worldX3=fx2+x3, worldZ3=fz2+z3;
+          const terrainY=slopeOffset(worldX3,worldZ3);
+          // How far does the retaining wall need to drop from pad level?
+          const drop=yBase - terrainY;
+          if(drop>0.1){
+            // Retaining wall body — hangs below pad surface
+            box3(ww, drop+padH, wd, wallCol, x3, padH/2-drop/2, z3);
+            // Coping on top
+            box3(ww+0.08, 0.1, wd+0.08, copingCol, x3, padH+0.05, z3);
+          }
+        });
 
       } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
         const stairH=wallH, stairW=fw, treadD=fh;
