@@ -1758,8 +1758,9 @@ function rebuild3d(){
         const colA=new THREE.MeshLambertMaterial({color:0xc49050});
         const colB=new THREE.MeshLambertMaterial({color:0xaa7840});
         for(let pi=0;pi<nPlanks;pi++){
-          // Plank world-2D centre (in canvas px)
-          const plankZcentre=el.y+plankW*(pi+0.5);
+          // Plank centre in canvas pixels for comparison with fc.x/fc.y
+          // plankW is in scene feet, so multiply back to px
+          const plankZcentre=el.y+plankW*PX_PER_FT*(pi+0.5);
           const plankXcentre=el.x+el.w/2;
           // Check if this plank centre is inside any floor-cutout on same floor
           const inCutout=floorCutouts.some(fc=>{
@@ -2313,23 +2314,8 @@ function rebuild3d(){
         }
 
       } else if(t==='floor-cutout'){
-        // Render a very dark plane at floor level — the slab hole lets you see through.
-        // The plane sits at yBase (group origin) so it's flush with the floor opening.
-        const voidMat=new THREE.MeshLambertMaterial({color:0x0a0a12,side:THREE.DoubleSide});
-        const voidPlane=new THREE.Mesh(new THREE.PlaneGeometry(fw,fh),voidMat);
-        voidPlane.rotation.x=-Math.PI/2;
-        voidPlane.position.set(0,0,0); // at yBase — just below the floor surface
-        G.add(voidPlane);
-        // Thin dark border around the opening edge
-        const edgeMat=new THREE.MeshLambertMaterial({color:0x3a2a18});
-        const edgeH=FLOOR_SEP+0.08;
-        [{w:fw,  d:0.06,x:0,       z:-fh/2},
-         {w:fw,  d:0.06,x:0,       z: fh/2},
-         {w:0.06,d:fh,  x:-fw/2,   z:0},
-         {w:0.06,d:fh,  x: fw/2,   z:0}].forEach(({w,d,x,z})=>{
-          const e=new THREE.Mesh(new THREE.BoxGeometry(w,edgeH,d),edgeMat);
-          e.position.set(x,-edgeH/2,z); G.add(e);
-        });
+        // Floor cutout renders nothing as furniture — the hole is created by
+        // the slab rendering skipping geometry in this area. Nothing to add here.
       } else {
         // generic fallback box
         box3(fw,0.5,fh,0x888888,0,0.25,0);
