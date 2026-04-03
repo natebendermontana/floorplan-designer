@@ -1220,7 +1220,9 @@ function updateProps() {
   } else if(el.type==='window'){
     const wtypes=[['window','Double-hung'],['picture-window','Picture'],['bay-window','Bay window'],['skylight','Skylight']];
     html+=row('Style',`<select class="prop-input" id="pe-wtype">${wtypes.map(([v,l])=>`<option value="${v}"${(el.wtype||'window')===v?' selected':''}>${l}</option>`).join('')}</select>`);
-    html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="1" max="20" step="0.5"'));
+    html+=row('Width (ft)',inp('pe-len','number',(el.len/PX_PER_FT).toFixed(1),'min="0.5" max="20" step="0.5"'));
+    html+=row('Height (ft)',inp('pe-winh','number',(el.winH??'').toString()||'','min="0.5" max="12" step="0.5" placeholder="auto"'));
+    html+=row('Sill ht (ft)',inp('pe-sillh','number',(el.sillH??'').toString()||'','min="0" max="10" step="0.5" placeholder="auto"'));
     html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
   }
   else if(el.type==='furniture'){html+=row('Type',val(FDEFS[el.ftype]?.label||el.ftype));
@@ -1240,6 +1242,8 @@ function updateProps() {
   bind('pe-angle',e=>{el.angle=parseInt(e.target.value)*Math.PI/180;render2d();});
   bind('pe-dtype',e=>{el.dtype=e.target.value;render2d();});
   bind('pe-wtype',e=>{el.wtype=e.target.value;render2d();});
+  bind('pe-winh', e=>{const v=parseFloat(e.target.value); el.winH = isNaN(v)||v<=0 ? undefined : v; if(panel3dOpen)rebuild3d();});
+  bind('pe-sillh',e=>{const v=parseFloat(e.target.value); el.sillH= isNaN(v)||v<0  ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
   const _flipBtn=document.getElementById('pe-flip');
   if(_flipBtn) _flipBtn.addEventListener('click',()=>{
@@ -1890,8 +1894,8 @@ function rebuild3d(){
     } else if(el.type==='window'){
       // Window: glass is thick enough to pierce both wall faces — visible inside & out
       const winLen = (el.len||PX_PER_FT*4)/PX_PER_FT;
-      const winH   = wallH * 0.42;   // ~42% of wall height
-      const sillH  = wallH * 0.35;   // sill 35% up
+      const winH   = (el.winH  && el.winH  > 0) ? el.winH  : wallH * 0.42;
+      const sillH  = (el.sillH != null && el.sillH >= 0) ? el.sillH : wallH * 0.35;
       const glassD = 0.8;            // deeper than wall (wt=0.25) so it pokes out both faces
       const frameD = glassD + 0.04;
       const wx3 = el.x/PX_PER_FT-cx, wz3 = el.y/PX_PER_FT-cz;
