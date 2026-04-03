@@ -1700,56 +1700,43 @@ function rebuild3d(){
         const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18}));
         fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
       } else {
-        // Upper floor — render slab and wood base with true rectangular cutouts.
-        // Find cutouts that overlap this room (in 2D canvas coordinates).
+        // Upper floor — render slab and wood base, with rectangular holes for floor-cutouts.
+        // Find cutouts overlapping this room (canvas pixel coords).
         const roomCutouts = floorCutouts.filter(fc => {
           if((fc.floor||0) !== fl) return false;
-          // Check overlap between room rect and cutout rect
           const fcx1=fc.x-fc.fw*PX_PER_FT/2, fcx2=fc.x+fc.fw*PX_PER_FT/2;
           const fcy1=fc.y-fc.fh*PX_PER_FT/2, fcy2=fc.y+fc.fh*PX_PER_FT/2;
           return fcx1<el.x+el.w && fcx2>el.x && fcy1<el.y+el.h && fcy2>el.y;
         });
 
-        // Helper: render a solid rectangle of the floor slab/base,
-        // clipped to the room bounds, with holes cut out for each cutout.
-        // We approximate by rendering 4 strips around each cutout.
-        // For simplicity, handle at most one cutout per room (most common case).
-        // Convert cutout to 3D coords relative to scene centre.
-        const slabMat  = new THREE.MeshLambertMaterial({color:0xd4cfc4});
-        const baseMat  = new THREE.MeshLambertMaterial({color:0xb8864a});
-
-        function addSlabRect(x3, z3, w3, d3) {
-          // Concrete slab
+        const slabMat = new THREE.MeshLambertMaterial({color:0xd4cfc4});
+        const baseMat = new THREE.MeshLambertMaterial({color:0xb8864a});
+        // Arrow fn (not function declaration) avoids hoisting issues, closes over yBase/fl correctly
+        const addSR = (x3,z3,w3,d3) => {
+          if(w3<0.05||d3<0.05) return;
           const s=new THREE.Mesh(new THREE.BoxGeometry(w3,FLOOR_SEP,d3),slabMat);
           s.position.set(x3,yBase-FLOOR_SEP/2,z3); s.castShadow=true; s.receiveShadow=true;
           addFP(s,fl);
-          // Wood base layer
           const b=new THREE.Mesh(new THREE.BoxGeometry(w3,0.06,d3),baseMat);
           b.position.set(x3,yBase+0.03,z3); b.receiveShadow=true;
           addFP(b,fl);
-        }
+        };
 
         if(roomCutouts.length===0){
-          // No cutouts — render full slab
-          addSlabRect(rx+rw/2, rz+rh/2, rw, rh);
+          addSR(rx+rw/2, rz+rh/2, rw, rh);
         } else {
-          // One cutout: render 4 border strips around it.
-          // Clamp cutout to room bounds in 3D units.
+          // Clamp the cutout to this room's bounds in 3D scene coords
           const fc=roomCutouts[0];
           const fcx1=Math.max(el.x, fc.x-fc.fw*PX_PER_FT/2)/PX_PER_FT-cx;
           const fcx2=Math.min(el.x+el.w, fc.x+fc.fw*PX_PER_FT/2)/PX_PER_FT-cx;
           const fcz1=Math.max(el.y, fc.y-fc.fh*PX_PER_FT/2)/PX_PER_FT-cz;
           const fcz2=Math.min(el.y+el.h, fc.y+fc.fh*PX_PER_FT/2)/PX_PER_FT-cz;
           const rx2=rx+rw, rz2=rz+rh;
-
-          // North strip (z < cutout)
-          if(fcz1-rz > 0.05) addSlabRect(rx+rw/2, (rz+fcz1)/2, rw, fcz1-rz);
-          // South strip (z > cutout)
-          if(rz2-fcz2 > 0.05) addSlabRect(rx+rw/2, (fcz2+rz2)/2, rw, rz2-fcz2);
-          // West strip (x < cutout), middle Z band
-          if(fcx1-rx > 0.05) addSlabRect((rx+fcx1)/2, (fcz1+fcz2)/2, fcx1-rx, fcz2-fcz1);
-          // East strip (x > cutout), middle Z band
-          if(rx2-fcx2 > 0.05) addSlabRect((fcx2+rx2)/2, (fcz1+fcz2)/2, rx2-fcx2, fcz2-fcz1);
+          // 4 border strips: N (near z), S (far z), W (left x), E (right x)
+          addSR(rx+rw/2,       (rz+fcz1)/2,    rw,        fcz1-rz);   // N: z < cutout
+          addSR(rx+rw/2,       (fcz2+rz2)/2,   rw,        rz2-fcz2);  // S: z > cutout
+          addSR((rx+fcx1)/2,   (fcz1+fcz2)/2,  fcx1-rx,   fcz2-fcz1); // W: x < cutout
+          addSR((fcx2+rx2)/2,  (fcz1+fcz2)/2,  rx2-fcx2,  fcz2-fcz1); // E: x > cutout
         }
 
         // Hardwood planks — skip planks that fall inside a floor-cutout
@@ -1758,15 +1745,19 @@ function rebuild3d(){
         const colA=new THREE.MeshLambertMaterial({color:0xc49050});
         const colB=new THREE.MeshLambertMaterial({color:0xaa7840});
         for(let pi=0;pi<nPlanks;pi++){
-          // Plank centre in canvas pixels for comparison with fc.x/fc.y
-          // plankW is in scene feet, so multiply back to px
-          const plankZcentre=el.y+plankW*PX_PER_FT*(pi+0.5);
-          const plankXcentre=el.x+el.w/2;
-          // Check if this plank centre is inside any floor-cutout on same floor
+          // Plank spans full room width in X, steps in Z.
+          // Check if this plank's Z band overlaps any cutout's Z range,
+          // AND the cutout overlaps this room's X range (not just centre).
+          const plankZ1=el.y+plankW*PX_PER_FT*pi;
+          const plankZ2=el.y+plankW*PX_PER_FT*(pi+1);
           const inCutout=floorCutouts.some(fc=>{
             if((fc.floor||0)!==(el.floor||0))return false;
-            const hw=fc.fw*PX_PER_FT/2, hh=fc.fh*PX_PER_FT/2;
-            return Math.abs(plankXcentre-fc.x)<hw && Math.abs(plankZcentre-fc.y)<hh;
+            const fcx1=fc.x-fc.fw*PX_PER_FT/2, fcx2=fc.x+fc.fw*PX_PER_FT/2;
+            const fcz1=fc.y-fc.fh*PX_PER_FT/2, fcz2=fc.y+fc.fh*PX_PER_FT/2;
+            // Plank overlaps cutout in Z, and cutout overlaps room in X
+            const zOverlap = plankZ1 < fcz2 && plankZ2 > fcz1;
+            const xOverlap = fcx1 < el.x+el.w && fcx2 > el.x;
+            return zOverlap && xOverlap;
           });
           if(inCutout)continue;
           const plank=new THREE.Mesh(
