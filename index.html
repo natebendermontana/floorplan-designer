@@ -126,6 +126,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="tb-btn" id="btn-toggle-3d" title="Toggle 3D preview"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3.5v5L8 14l-6-3.5v-5z"/><path d="M8 2v12M2 5.5l6 3.5 6-3.5"/></svg>3D</button>
   <div class="tb-sep"></div>
   <button class="tb-icon" id="btn-fit" title="Fit to view (Home)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+  <button class="tb-icon" id="btn-zoom-in"  title="Zoom in (+)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="11" y1="11" x2="14" y2="14"/></svg></button>
+  <button class="tb-icon" id="btn-zoom-out" title="Zoom out (-)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="11" y1="11" x2="14" y2="14"/></svg></button>
   <span style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0" title="Property size">Lot:</span>
   <input id="lot-w" type="number" value="100" min="20" max="500" step="10" title="Lot width (ft)" style="width:42px;padding:2px 5px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:11px">
   <span style="font-size:10px;color:var(--text3);flex-shrink:0">×</span>
@@ -1368,7 +1370,72 @@ document.getElementById('btn-export-png').addEventListener('click',()=>{
 });
 document.getElementById('scale-input').addEventListener('input',e=>{PX_PER_FT=parseInt(e.target.value)||20;render2d();});
 document.getElementById('grid-input').addEventListener('input',e=>{GRID_FT=parseFloat(e.target.value)||1;render2d();});
-document.getElementById('btn-fit').addEventListener('click', fitView);
+document.getElementById('btn-fit').addEventListener('click', ()=>{ fitView(); if(panel3dOpen) fitView3d(); });
+
+// fitView3d: set 3D camera to frame all elements in view
+function fitView3d(){
+  if(!camera3) return;
+  // Compute bounding box of all elements in 3D scene units
+  let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+  let hasContent=false;
+  elements.forEach(el=>{
+    if(el.type==='room'){
+      minX=Math.min(minX,el.x/PX_PER_FT); maxX=Math.max(maxX,(el.x+el.w)/PX_PER_FT);
+      minZ=Math.min(minZ,el.y/PX_PER_FT); maxZ=Math.max(maxZ,(el.y+el.h)/PX_PER_FT);
+      hasContent=true;
+    } else if(el.type==='wall'){
+      minX=Math.min(minX,el.x1/PX_PER_FT,el.x2/PX_PER_FT); maxX=Math.max(maxX,el.x1/PX_PER_FT,el.x2/PX_PER_FT);
+      minZ=Math.min(minZ,el.y1/PX_PER_FT,el.y2/PX_PER_FT); maxZ=Math.max(maxZ,el.y1/PX_PER_FT,el.y2/PX_PER_FT);
+      hasContent=true;
+    } else if(el.type==='furniture'||el.type==='door'||el.type==='window'){
+      const hw=(el.fw||4)/2, hh=(el.fh||4)/2;
+      minX=Math.min(minX,el.x/PX_PER_FT-hw); maxX=Math.max(maxX,el.x/PX_PER_FT+hw);
+      minZ=Math.min(minZ,el.y/PX_PER_FT-hh); maxZ=Math.max(maxZ,el.y/PX_PER_FT+hh);
+      hasContent=true;
+    }
+  });
+  if(!hasContent){ minX=-10;maxX=10;minZ=-10;maxZ=10; }
+  const sceneW=maxX-minX, sceneD=maxZ-minZ;
+  const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
+  // Target = horizontal centre of scene, slightly above ground
+  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
+  // Compute required radius: fit the widest dimension in view
+  // camera FOV is 45°, so half-extent / tan(FOV/2) gives distance
+  const extent=Math.max(sceneW, sceneD, 10)*0.7;
+  const fov=45*Math.PI/180;
+  const dist=extent/Math.tan(fov/2);
+  spherical.tx=cx; spherical.ty=wallH*0.3; spherical.tz=cz;
+  spherical.radius=Math.max(dist, 8);
+  spherical.theta=Math.PI/4; // 45° angle for a nice isometric-ish view
+  spherical.phi=Math.PI/3;   // ~60° elevation
+  updateCam3();
+}
+
+// Zoom buttons — work for both 2D and 3D
+document.getElementById('btn-zoom-in').addEventListener('click',()=>{
+  if(panel3dOpen){
+    spherical.radius=Math.max(4, spherical.radius*0.8);
+    updateCam3();
+  } else {
+    const cx=canvas2d.width/2, cy=canvas2d.height/2;
+    const newZoom=Math.min(8, viewZoom*1.25);
+    viewOX=cx-(cx-viewOX)*(newZoom/viewZoom);
+    viewOY=cy-(cy-viewOY)*(newZoom/viewZoom);
+    viewZoom=newZoom; render2d();
+  }
+});
+document.getElementById('btn-zoom-out').addEventListener('click',()=>{
+  if(panel3dOpen){
+    spherical.radius=Math.min(130, spherical.radius*1.25);
+    updateCam3();
+  } else {
+    const cx=canvas2d.width/2, cy=canvas2d.height/2;
+    const newZoom=Math.max(0.15, viewZoom*0.8);
+    viewOX=cx-(cx-viewOX)*(newZoom/viewZoom);
+    viewOY=cy-(cy-viewOY)*(newZoom/viewZoom);
+    viewZoom=newZoom; render2d();
+  }
+});
 document.getElementById('lot-w').addEventListener('input', fitView);
 document.getElementById('lot-h').addEventListener('input', fitView);
 document.addEventListener('keydown',e=>{
@@ -1425,7 +1492,7 @@ document.getElementById('btn-toggle-3d').addEventListener('click',()=>{
   if(panel3dOpen){
     panel.classList.add('open');
     panel.style.width=panel3dWidth+'px';
-    setTimeout(()=>{initThree();rebuild3d();resize();},30);
+    setTimeout(()=>{initThree();rebuild3d();fitView3d();resize();},50);
   } else {
     panel.classList.remove('open');
     panel.style.width='0';
@@ -1715,10 +1782,12 @@ function rebuild3d(){
 
         // Foundation fill: opaque concrete slab from yBase down to the lowest
         // terrain corner, so the slope is never visible inside the room footprint.
+        // Foundation fill: only needed where terrain drops BELOW the floor level.
+        // lowestTerrain may be negative (downhill corners). foundH = floor - lowest.
         const corners=[[rx,rz],[rx+rw,rz],[rx,rz+rh],[rx+rw,rz+rh]];
         const lowestTerrain=Math.min(...corners.map(([x,z])=>slopeOffset(x,z)));
-        const foundH=Math.max(0.05, yBase-lowestTerrain+0.05);
-        if(foundH>0.05){
+        const foundH=yBase-lowestTerrain+0.1; // how far down we need to fill
+        if(foundH>0.1){
           const foundMat=new THREE.MeshLambertMaterial({color:0xb8b0a0});
           const found=new THREE.Mesh(new THREE.BoxGeometry(rw,foundH,rh),foundMat);
           found.position.set(rx+rw/2, yBase-foundH/2, rz+rh/2);
@@ -1811,12 +1880,13 @@ function rebuild3d(){
         // Above-ground wall
         const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
         m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;addFP(m,fl);
-        // Stem wall: extend below yBase down to lowest terrain under this wall face
+        // Stem wall: extend below yBase on downhill sides (where terrain is below floor)
         if(fl===0){
           const terrainUnder=slopeOffset(wd.x,wd.z);
-          const stemH=Math.max(0,yBase-terrainUnder+0.1);
-          if(stemH>0.05){
-            const stemMat=new THREE.MeshLambertMaterial({color:fl===0?0xb0a890:0x8898a8,side:THREE.DoubleSide});
+          const drop=yBase-terrainUnder; // positive = terrain below floor = we need a stem
+          if(drop>0.05){
+            const stemMat=new THREE.MeshLambertMaterial({color:0xb0a890,side:THREE.DoubleSide});
+            const stemH=drop+0.05;
             const stem=new THREE.Mesh(new THREE.BoxGeometry(wd.w,stemH,wd.d+0.02),stemMat);
             stem.position.set(wd.x,yBase-stemH/2,wd.z);stem.castShadow=true;addFP(stem,fl);
           }
@@ -2390,23 +2460,28 @@ function rebuild3d(){
   // Ground: a large tilted terrain plane.
   // We use a BoxGeometry with many segments so we can keep it thick enough
   // to fill below the structure without gaps.
-  const TERRAIN_SIZE=300;
-  const slopeAxis={E:new THREE.Vector3(0,0,1),W:new THREE.Vector3(0,0,-1),S:new THREE.Vector3(-1,0,0),N:new THREE.Vector3(1,0,0)}[slopeDir]||new THREE.Vector3(0,0,1);
-
-  // Grass plane (tilted)
+  // Terrain: vertex-displaced grid where each vertex Y = slopeOffset(x,z).
+  // This gives a true slope surface that correctly passes through every point.
+  const TERRAIN_SIZE=200;
+  const TERRAIN_SEGS=40; // enough segments to look smooth
+  const terrainGeo=new THREE.PlaneGeometry(TERRAIN_SIZE,TERRAIN_SIZE,TERRAIN_SEGS,TERRAIN_SEGS);
+  terrainGeo.rotateX(-Math.PI/2); // lay flat in XZ plane
+  // Displace each vertex by slopeOffset
+  const pos=terrainGeo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const vx=pos.getX(i), vz=pos.getZ(i);
+    pos.setY(i, slopeOffset(vx,vz));
+  }
+  pos.needsUpdate=true;
+  terrainGeo.computeVertexNormals();
   const grassMat=new THREE.MeshLambertMaterial({color:0x3a6030,side:THREE.DoubleSide});
-  const grass=new THREE.Mesh(new THREE.PlaneGeometry(TERRAIN_SIZE,TERRAIN_SIZE),grassMat);
-  grass.rotation.x=-Math.PI/2;
-  if(slopeRad>0.001) grass.rotateOnWorldAxis(slopeAxis,slopeRad);
-  grass.position.y=-0.02;
+  const grass=new THREE.Mesh(terrainGeo,grassMat);
   grass.receiveShadow=true;grass.userData.fp=true;scene3.add(grass);
 
-  // Thick dirt fill below terrain — prevents seeing through the slope underside
+  // Thick dirt box below to fill any gaps under the terrain surface
   const dirtMat=new THREE.MeshLambertMaterial({color:0x5a4030});
-  const dirt=new THREE.Mesh(new THREE.BoxGeometry(TERRAIN_SIZE,8,TERRAIN_SIZE),dirtMat);
-  dirt.rotation.x=0;
-  if(slopeRad>0.001) dirt.rotateOnWorldAxis(slopeAxis,slopeRad);
-  dirt.position.y=-4.04;
+  const dirt=new THREE.Mesh(new THREE.BoxGeometry(TERRAIN_SIZE,20,TERRAIN_SIZE),dirtMat);
+  dirt.position.y=-10;
   dirt.userData.fp=true;scene3.add(dirt);
   applyFloorVisibility();
 }
