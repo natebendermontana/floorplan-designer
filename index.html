@@ -602,6 +602,7 @@ const FDEFS={
   'driveway':    {w:10, h:20,  label:'Driveway'},
   'path':        {w:3,  h:8,   label:'Path'},
   'graded-area': {w:20, h:20,  label:'Graded area'},
+  'floor-cutout': {w:4,  h:4,   label:'Floor cutout'},
 };
 
 function drawFurniture(el, sel) {
@@ -877,6 +878,20 @@ function drawFurniture(el, sel) {
     ctx.fillStyle=dark?'rgba(255,255,255,0.09)':'rgba(0,0,0,0.06)';
     ctx.fillRect(-pw/2+runW-2/viewZoom,-ph/2+run1H-runH,runW+2/viewZoom,runH+2/viewZoom);
 
+  } else if(t==='floor-cutout'){
+    // Hatched rectangle showing floor opening
+    ctx.fillStyle=dark?'rgba(0,0,0,0.35)':'rgba(0,0,0,0.12)';
+    ctx.fillRect(-pw/2,-ph/2,pw,ph);
+    ctx.strokeStyle=sel?'#3B82F6':(dark?'rgba(255,100,100,0.8)':'rgba(180,40,40,0.7)');
+    ctx.lineWidth=sel?2:1.5;
+    ctx.strokeRect(-pw/2,-ph/2,pw,ph);
+    // X cross to indicate hole/void
+    ctx.beginPath();ctx.moveTo(-pw/2,-ph/2);ctx.lineTo(pw/2,ph/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pw/2,-ph/2);ctx.lineTo(-pw/2,ph/2);ctx.stroke();
+    ctx.font=`${Math.min(9,pw*0.2)}px -apple-system,sans-serif`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=dark?'rgba(255,120,120,0.7)':'rgba(160,40,40,0.6)';
+    ctx.fillText('VOID',0,0);
   // ── Fallback ──
   } else { box(-pw/2,-ph/2,pw,ph); }
 
@@ -1257,7 +1272,7 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
 const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-out-btn':'dd-out'};
 
@@ -1434,13 +1449,15 @@ document.addEventListener('keydown',e=>{
   // Arrow keys: pan the 3D camera target when panel is open and no input is focused
   if(!panel3dOpen) return;
   if(document.activeElement&&['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
-  const PAN=0.6, VERT=0.4;
-  // Compute right/forward vectors from current theta so left/right pan is screen-relative
-  const cosT=Math.cos(spherical.theta), sinT=Math.sin(spherical.theta);
+  const PAN=0.6;
+  // Camera position = target + r*(sin(phi)*sin(theta), cos(phi), sin(phi)*cos(theta))
+  // Forward (cam→target projected on XZ) = (-sin(theta), 0, -cos(theta))
+  // Right = perpendicular on XZ = (-cos(theta), 0, sin(theta))
+  const sinT=Math.sin(spherical.theta), cosT=Math.cos(spherical.theta);
   if(e.key==='ArrowLeft')  { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; e.preventDefault(); }
   if(e.key==='ArrowRight') { spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; e.preventDefault(); }
-  if(e.key==='ArrowUp')    { spherical.ty+=VERT; e.preventDefault(); }
-  if(e.key==='ArrowDown')  { spherical.ty-=VERT; e.preventDefault(); }
+  if(e.key==='ArrowUp')    { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; e.preventDefault(); }
+  if(e.key==='ArrowDown')  { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; e.preventDefault(); }
   if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown') updateCam3();
 },true);
 
@@ -1599,6 +1616,8 @@ function rebuild3d(){
   // Upper floor: sits on top of the ground-floor room directly below it
   const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area'];
   const roomElevMap=new Map();
+  // Floor cutouts: suppress planks in these 2D regions
+  const floorCutouts=elements.filter(e=>e.type==='furniture'&&e.ftype==='floor-cutout');
   const groundRooms=elements.filter(e=>e.type==='room'&&(e.floor||0)===0);
   const upperRooms =elements.filter(e=>e.type==='room'&&(e.floor||0)===1);
 
@@ -1695,22 +1714,27 @@ function rebuild3d(){
         floorBase2.receiveShadow=true;
         addFP(floorBase2,fl);
 
-        // Hardwood planks — narrow boxes running along the room width (X axis),
-        // alternating slightly in colour to give a real plank look.
-        const nPlanks=Math.max(3,Math.round(rh/0.25)); // one plank per ~3 inches
+        // Hardwood planks — skip planks that fall inside a floor-cutout
+        const nPlanks=Math.max(3,Math.round(rh/0.25));
         const plankW=rh/nPlanks;
         const colA=new THREE.MeshLambertMaterial({color:0xc49050});
         const colB=new THREE.MeshLambertMaterial({color:0xaa7840});
         for(let pi=0;pi<nPlanks;pi++){
+          // Plank world-2D centre (in canvas px)
+          const plankZcentre=el.y+plankW*(pi+0.5);
+          const plankXcentre=el.x+el.w/2;
+          // Check if this plank centre is inside any floor-cutout on same floor
+          const inCutout=floorCutouts.some(fc=>{
+            if((fc.floor||0)!==(el.floor||0))return false;
+            const hw=fc.fw*PX_PER_FT/2, hh=fc.fh*PX_PER_FT/2;
+            return Math.abs(plankXcentre-fc.x)<hw && Math.abs(plankZcentre-fc.y)<hh;
+          });
+          if(inCutout)continue;
           const plank=new THREE.Mesh(
             new THREE.BoxGeometry(rw-0.04, 0.04, plankW-0.015),
             pi%2===0?colA:colB
           );
-          plank.position.set(
-            rx+rw/2,
-            yBase+0.065,
-            rz+plankW*(pi+0.5)
-          );
+          plank.position.set(rx+rw/2, yBase+0.065, rz+plankW*(pi+0.5));
           addFP(plank,fl);
         }
       }
@@ -2250,6 +2274,23 @@ function rebuild3d(){
             box3(fw/2, tS2, tD2, tC, -fw/4, stairH/2+rH2*i+tS2/2, tD2*(i+0.5));
         }
 
+      } else if(t==='floor-cutout'){
+        // Render a dark recessed plane to show the void/hole in the floor
+        // Sits just below the floor surface level (at y=0 relative to group = yBase)
+        const voidMat=new THREE.MeshLambertMaterial({color:0x111118,side:THREE.DoubleSide});
+        const voidPlane=new THREE.Mesh(new THREE.PlaneGeometry(fw,fh),voidMat);
+        voidPlane.rotation.x=-Math.PI/2;
+        voidPlane.position.set(0,-0.02,0);
+        G.add(voidPlane);
+        // Also render a slightly visible edge border
+        const edgeMat=new THREE.MeshLambertMaterial({color:0x4a3020});
+        [[fw,0.08,0.08,0,0.04,0],[fw,0.08,0.08,0,0.04,0],
+         [0.08,0.08,fh,-fw/2+0.04,0.04,0],[0.08,0.08,fh,fw/2-0.04,0.04,0]].forEach(([w,h,d,x,y,z],idx)=>{
+          if(idx===0)z=-fh/2+0.04;
+          if(idx===1)z=fh/2-0.04;
+          const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),edgeMat);
+          e.position.set(x,y,z);G.add(e);
+        });
       } else {
         // generic fallback box
         box3(fw,0.5,fh,0x888888,0,0.25,0);
@@ -2309,6 +2350,7 @@ setTimeout(fitView, 50);
     <div class="tool-grid">
       <button class="tool-tile" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
       <button class="tool-tile" data-tool="wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="5" x2="2" y2="13"/><line x1="16" y1="5" x2="16" y2="13"/></svg>Wall</button>
+      <button class="tool-tile" data-tool="floor-cutout"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" stroke-dasharray="2 2"/><line x1="2" y1="2" x2="16" y2="16"/><line x1="16" y1="2" x2="2" y2="16"/></svg>Floor void</button>
       <button class="tool-tile" data-tool="half-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="16" y2="12"/><line x1="2" y1="8" x2="2" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><line x1="2" y1="8" x2="16" y2="8" stroke-dasharray="2 2"/></svg>Half-wall</button>
     </div>
     <div class="dd-label">Stairs</div>
