@@ -2171,11 +2171,13 @@ function rebuild3d(){
       } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
         const stairH=wallH, stairW=fw, treadD=fh;
         if(t==='stairs-straight'){
-          const nTreads=Math.max(4,Math.round(treadD*3));
-          const riserH=stairH/nTreads, tD=treadD/nTreads;
-          for(let i=0;i<nTreads;i++) box3(stairW,riserH*(i+1),tD,0xd4c8a8,0,riserH*(i+1)/2,-treadD/2+tD*(i+0.5));
-          box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
-          box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
+          // Floating tread slabs — full width, +Z, rising 0→stairH
+          const nT     = Math.max(4, Math.round(treadD*2.5));
+          const rH     = stairH/nT;
+          const tD     = treadD/nT;
+          const tSlabH = Math.max(0.06, rH*0.18);
+          for(let i=0;i<nT;i++)
+            box3(stairW, tSlabH, tD, 0xe0d8c0, 0, rH*i+tSlabH/2, -treadD/2+tD*(i+0.5));
         } else if(t==='stairs-landing'){
           // Switchback stairs — free-floating tread slabs only, no fill.
           //
@@ -2228,12 +2230,24 @@ function rebuild3d(){
           box3(stairW, tSlabH, landD, treadC, 0, stairH/2 + tSlabH/2, zLand + landD/2);
 
         } else {
-          const halfH=stairH/2, nT=Math.max(3,Math.round(fh/2*2));
-          const tD=fh/2/nT, rH=halfH/nT;
-          for(let i=0;i<nT;i++) box3(fw/2,rH*(i+1),tD,0xd4c8a8,-fw/4,rH*(i+1)/2,-fh/2+tD*(i+0.5));
-          box3(fw/2,0.15,fw/2,0xc8c0a8,-fw/4,halfH+0.075,0);
-          const tD2=fw/2/nT;
-          for(let i=0;i<nT;i++) box3(tD2,halfH+rH*(i+1),fh/2,0xd4c8a8,-fw/2+tD2*(i+0.5),(halfH+rH*(i+1))/2,fh/4);
+          // L-stairs: floating slabs. fw=8, fh=8.
+          // Run 1: full width (fw), +Z from z=-fh/2 to z=0, rises 0→stairH/2
+          // Landing: square left-half (fw/2 × fh/2) at z=0..fh/2, height=stairH/2
+          // Run 2: left half (fw/2), +Z from z=0 to z=fh/2, rises stairH/2→stairH
+          const tC = 0xe0d8c0, lC = 0xd8d0b8;
+
+          const nT1=Math.max(4,Math.round((fh/2)*2.5));
+          const rH1=(stairH/2)/nT1, tD1=(fh/2)/nT1, tS1=Math.max(0.06,rH1*0.18);
+          for(let i=0;i<nT1;i++)
+            box3(fw, tS1, tD1, tC, 0, rH1*i+tS1/2, -fh/2+tD1*(i+0.5));
+
+          // Landing square at far end of run1, left half
+          box3(fw/2, tS1, fh/2, lC, -fw/4, stairH/2+tS1/2, fh/4);
+
+          const nT2=Math.max(4,Math.round((fh/2)*2.5));
+          const rH2=(stairH/2)/nT2, tD2=(fh/2)/nT2, tS2=Math.max(0.06,rH2*0.18);
+          for(let i=0;i<nT2;i++)
+            box3(fw/2, tS2, tD2, tC, -fw/4, stairH/2+rH2*i+tS2/2, tD2*(i+0.5));
         }
 
       } else {
