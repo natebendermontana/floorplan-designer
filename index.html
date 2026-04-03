@@ -2177,48 +2177,40 @@ function rebuild3d(){
           box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
           box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
         } else if(t==='stairs-landing'){
-          // True switchback: run 1 goes +Z, landing spans full width, run 2 goes -Z (180° reversal)
-          // Both runs share the same Z footprint but sit in opposite X halves.
-          // Layout along Z axis:  [run1 treads: z = zBot → zMid] [landing: zMid → zTop]
-          //                       [run2 treads go from zTop back to zBot, reversed]
-          const runW   = stairW / 2;              // each run is half the total width
-          const landD  = Math.max(runW, treadD * 0.18); // landing depth ≥ run width so it feels wide
-          const runD   = treadD - landD;           // run depth along Z (same for both runs)
-          const nT     = Math.max(4, Math.round(runD * 2.8));
-          const rH     = stairH / 2 / nT;         // riser height per step (each run covers half total rise)
-          const tD     = runD / nT;               // tread depth per step
+          // Switchback stair:
+          //   Z layout: [Run1: zBot→zR1end] [Landing: zR1end→zR2start] [Run2: zR2start→zTop]
+          //   Run1 is in left half (x<0), goes +Z, rises floor→midHeight
+          //   Run2 is in right half (x>0), goes -Z (reversed), rises midHeight→fullHeight
+          //   Both runs have equal depth = runD. Landing occupies the middle strip.
+          const runW  = stairW / 2;               // each run occupies half the width
+          const landD = Math.max(runW * 0.8, treadD * 0.16); // landing depth
+          const runD  = (treadD - landD) / 2;     // EACH run gets half the non-landing depth
+          const nT    = Math.max(4, Math.round(runD * 3.0));
+          const rH    = stairH / 2 / nT;          // riser per step (each run = half total rise)
+          const tD    = runD / nT;                // tread depth per step
 
-          const zBot = -treadD / 2;               // near edge of footprint
-          const zMid = zBot + runD;               // where landing starts
-          const zTop = zMid + landD;              // far edge = should equal treadD/2
+          // Z anchor points
+          const zBot    = -treadD / 2;            // near edge (bottom of run 1)
+          const zR1end  = zBot + runD;            // end of run 1 / start of landing
+          const zR2start= zR1end + landD;         // start of run 2 (far side of landing)
+          const zTop    = zR2start + runD;        // far edge (= +treadD/2 by construction)
 
-          // Run 1 — left half (x = -runW/2 centre), travels +Z, rising from floor to mid-height
-          for(let i = 0; i < nT; i++){
-            // Cumulative-height stair box: each box includes all steps below it
+          // Run 1 — left half, steps travel +Z from zBot
+          for(let i = 0; i < nT; i++)
             box3(runW, rH*(i+1), tD, 0xd4c8a8, -runW/2, rH*(i+1)/2, zBot + tD*(i+0.5));
-          }
 
-          // Landing slab — full width, flat platform at mid-height
-          box3(stairW, 0.2, landD, 0xc0b898, 0, stairH/2 + 0.1, zMid + landD/2);
+          // Landing slab — full width at mid-height
+          box3(stairW, 0.22, landD, 0xc0b898, 0, stairH/2 + 0.11, zR1end + landD/2);
 
-          // Run 2 — right half (x = +runW/2 centre), travels -Z (reversed direction),
-          // starting from the far end (zTop) stepping back toward zMid level.
-          // Height starts at stairH/2 (landing level) and rises to stairH.
-          for(let i = 0; i < nT; i++){
-            box3(runW, stairH/2 + rH*(i+1), tD, 0xd4c8a8, runW/2,
-              (stairH/2 + rH*(i+1))/2,
-              zTop - tD*(i+0.5));  // note: stepping in -Z direction from far end
-          }
+          // Run 2 — right half, steps travel -Z from zTop back toward zR2start
+          // i=0 is the first step up from the landing (nearest the landing), placed at zTop-tD/2
+          for(let i = 0; i < nT; i++)
+            box3(runW, stairH/2 + rH*(i+1), tD, 0xd4c8a8,
+              runW/2,
+              (stairH/2 + rH*(i+1)) / 2,
+              zTop - tD*(i+0.5));   // steps from zTop inward; last step ends at zTop-runD = zR2start
 
-          // Outer stringers (full-height side walls, run the full treadD)
-          box3(0.07, stairH, treadD, 0x8a6a40, -stairW/2 + 0.04, stairH/2, 0);
-          box3(0.07, stairH, treadD, 0x8a6a40,  stairW/2 - 0.04, stairH/2, 0);
-          // Centre stringer between the two runs
-          box3(0.07, stairH, runD, 0x9a7a50, 0, stairH/2, zBot + runD/2);
-          // Handrail posts at top of each run
-          const railMat = 0x7a6030;
-          box3(0.05, 0.9, 0.05, railMat, -runW/2, stairH/2 + 0.9/2, zMid - 0.1);
-          box3(0.05, 0.9, 0.05, railMat,  runW/2, stairH/2 + 0.9/2, zMid - 0.1);
+          // No stringers — open sides
         } else {
           const halfH=stairH/2, nT=Math.max(3,Math.round(fh/2*2));
           const tD=fh/2/nT, rH=halfH/nT;
