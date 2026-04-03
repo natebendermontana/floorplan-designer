@@ -1197,7 +1197,7 @@ function updateProps() {
   const inp=(id,type,value,extra='')=>`<input class="prop-input" id="${id}" type="${type}" value="${value}" ${extra}>`;
   const sel2=(id,opts,cur)=>`<select class="prop-input" id="${id}">${opts.map(([v,l])=>`<option value="${v}"${v==cur?' selected':''}>${l}</option>`).join('')}</select>`;
   let html='';
-  if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);}}
+  if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
   else if(el.type==='room'){
     html+=row('Type',val('Room'));
     html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));
@@ -1239,6 +1239,7 @@ function updateProps() {
   const bind=(id,fn)=>{const e2=document.getElementById(id);if(e2)e2.addEventListener('input',fn);};
   bind('pe-thick',e=>{el.thickness=parseInt(e.target.value)||8;render2d();});
   bind('pe-half',e=>{el.half=e.target.value==='1';render2d();});
+  bind('pe-fixedelev',e=>{el.fixedElev=e.target.value==='1';if(panel3dOpen)rebuild3d();});
   bind('pe-len',e=>{el.len=parseFloat(e.target.value)*PX_PER_FT;render2d();});
   bind('pe-fw',e=>{el.fw=parseFloat(e.target.value)||1;render2d();});
   bind('pe-fh',e=>{el.fh=parseFloat(e.target.value)||1;render2d();});
@@ -1677,7 +1678,7 @@ function rebuild3d(){
       yBase=roomElev(el);
     } else if(el.type==='furniture'&&el.ftype==='graded-area'){
       // Graded area sits at its explicit elevation, or terrain at its centre
-      yBase = el.elevation ?? terrainAt(el.x, el.y);
+      yBase = el.elevation ?? 0;  // defaults to flat grade (cuts into uphill side)
     } else if(el.type==='furniture'&&(OUTDOOR_FTYPES.includes(el.ftype)||el.ftype==='floor-cutout')){
       // Outdoor + cutout: follow terrain
       const base = fl===1 ? (()=>{
@@ -1693,7 +1694,9 @@ function rebuild3d(){
     } else if(el.type==='wall'){
       const mx2d=(el.x1+el.x2)/2, my2d=(el.y1+el.y2)/2;
       const room=containingRoom(mx2d,my2d,fl);
-      yBase=room ? roomElev(room) : slopeOffset(ex3,ez3);
+      if(room) yBase=roomElev(room);
+      else if(el.fixedElev) yBase=0;          // user pinned to floor level
+      else yBase=slopeOffset(ex3,ez3);        // default: follows terrain
     } else {
       yBase=slopeOffset(ex3,ez3);
     }
@@ -1805,8 +1808,19 @@ function rebuild3d(){
       ];
       wallDefs.forEach(wd=>{
         if(roomW[wd.key]===false) return; // open face — no wall mesh
+        // Above-ground wall
         const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
         m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;addFP(m,fl);
+        // Stem wall: extend below yBase down to lowest terrain under this wall face
+        if(fl===0){
+          const terrainUnder=slopeOffset(wd.x,wd.z);
+          const stemH=Math.max(0,yBase-terrainUnder+0.1);
+          if(stemH>0.05){
+            const stemMat=new THREE.MeshLambertMaterial({color:fl===0?0xb0a890:0x8898a8,side:THREE.DoubleSide});
+            const stem=new THREE.Mesh(new THREE.BoxGeometry(wd.w,stemH,wd.d+0.02),stemMat);
+            stem.position.set(wd.x,yBase-stemH/2,wd.z);stem.castShadow=true;addFP(stem,fl);
+          }
+        }
       });
 
       // Label sprite (room name only, no sq ft)
@@ -2238,36 +2252,47 @@ function rebuild3d(){
         for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
 
       } else if(t==='graded-area'){
-        // Flat concrete pad at yBase (el.elevation or terrain at centre)
-        const padH=0.2;
-        box3(fw, padH, fh, 0xc8c0b0, 0, padH/2, 0);  // concrete slab
+        // Graded area: flat concrete pad at yBase.
+        // Each side checks whether terrain is ABOVE pad (cut/retaining) or
+        // BELOW pad (fill/exposed). Renders appropriate face for each.
+        const padThk=0.2;
+        box3(fw, padThk, fh, 0xc8c0b0, 0, padThk/2, 0);
 
-        // Retaining walls: hang down from pad level to terrain on each of 4 sides.
-        // fx2/fz2 are 3D coords of element centre. Convert edge midpoints to 3D.
-        const edgePad=0.06;  // wall thickness
-        const wallCol=0x9a8878, copingCol=0xb0a090;
+        const retainCol=0x9a8878, fillCol=0xb09060, copingCol=0xb8ae9e, earthCol=0x7a6040;
+        const wThk=0.22;
 
-        // For each edge, compute how far down the terrain is at that edge midpoint
-        // compared to this pad's yBase. That's how tall the retaining wall needs to be.
-        const edges=[
-          // {axis, dir, edgeMidX3, edgeMidZ3, wallW, wallD}
-          {label:'N', x3:0,        z3:-fh/2, ww:fw, wd:edgePad},
-          {label:'S', x3:0,        z3: fh/2, ww:fw, wd:edgePad},
-          {label:'W', x3:-fw/2,    z3:0,     ww:edgePad, wd:fh},
-          {label:'E', x3: fw/2,    z3:0,     ww:edgePad, wd:fh},
+        // Sample terrain at each edge midpoint (world 3D coords)
+        const edgeSamples=[
+          {x3:0,     z3:-fh/2, ww:fw,     wd:wThk, dir:'z', sign:-1}, // N edge
+          {x3:0,     z3: fh/2, ww:fw,     wd:wThk, dir:'z', sign: 1}, // S edge
+          {x3:-fw/2, z3:0,     ww:wThk,   wd:fh,   dir:'x', sign:-1}, // W edge
+          {x3: fw/2, z3:0,     ww:wThk,   wd:fh,   dir:'x', sign: 1}, // E edge
         ];
-        edges.forEach(({x3,z3,ww,wd})=>{
-          // Terrain Y at this edge in world coords
-          const worldX3=fx2+x3, worldZ3=fz2+z3;
-          const terrainY=slopeOffset(worldX3,worldZ3);
-          // How far does the retaining wall need to drop from pad level?
-          const drop=yBase - terrainY;
-          if(drop>0.1){
-            // Retaining wall body — hangs below pad surface
-            box3(ww, drop+padH, wd, wallCol, x3, padH/2-drop/2, z3);
-            // Coping on top
-            box3(ww+0.08, 0.1, wd+0.08, copingCol, x3, padH+0.05, z3);
+
+        edgeSamples.forEach(({x3,z3,ww,wd,dir,sign})=>{
+          const terrainY=slopeOffset(fx2+x3, fz2+z3);
+          const diff=terrainY-yBase; // positive = terrain above pad (need retaining wall)
+
+          if(diff>0.05){
+            // UPHILL side: retaining wall from pad surface up to terrain level
+            // Concrete face
+            box3(ww, diff+padThk, wThk, retainCol, x3, padThk/2+diff/2, z3);
+            // Coping strip
+            box3(ww+0.1, 0.1, wThk+0.1, copingCol, x3, padThk+diff+0.05, z3);
+            // Earth wedge behind the wall (triangular approximation with a tapered box)
+            // The earth rises from pad level at the wall face to terrain level some distance back
+            const earthDepth=Math.min(diff*1.5, dir==='z'?fh*0.4:fw*0.4);
+            box3(ww, diff*0.6, earthDepth, earthCol,
+              x3+sign*(wThk/2+earthDepth/2)*0,  // centred on wall
+              padThk+diff*0.3,
+              z3+sign*(wThk/2+earthDepth/2));
+
+          } else if(diff<-0.05){
+            // DOWNHILL side: exposed fill face from terrain level up to pad
+            const fillH=Math.abs(diff)+padThk;
+            box3(ww, fillH, wThk, fillCol, x3, padThk/2-Math.abs(diff)/2, z3);
           }
+          // Near-flat: no wall needed
         });
 
       } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
