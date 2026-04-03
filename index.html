@@ -1204,6 +1204,9 @@ function updateProps() {
     html+=row('Height',val(`${(el.h/PX_PER_FT).toFixed(2)} ft`));
     html+=row('Area',val(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft²`));
     html+=row('Label',inp('pe-label','text',el.label||''));
+    html+=row('Elevation (ft)',inp('pe-elevation','number',
+      el.elevation!=null?el.elevation.toFixed(1):'',
+      'step="0.5" placeholder="auto (terrain)"'));
     // Per-face open/closed toggles
     const W=el.walls||{N:true,S:true,E:true,W:true};
     const faceBtn=(key,label)=>{
@@ -1245,6 +1248,11 @@ function updateProps() {
   bind('pe-winh', e=>{const v=parseFloat(e.target.value); el.winH = isNaN(v)||v<=0 ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-sillh',e=>{const v=parseFloat(e.target.value); el.sillH= isNaN(v)||v<0  ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
+  bind('pe-elevation',e=>{
+    const v=parseFloat(e.target.value);
+    el.elevation = isNaN(v) ? undefined : v;
+    if(panel3dOpen) rebuild3d();
+  });
   const _flipBtn=document.getElementById('pe-flip');
   if(_flipBtn) _flipBtn.addEventListener('click',()=>{
     el.flip=!el.flip;
@@ -1601,96 +1609,90 @@ function rebuild3d(){
     return obj;
   }
 
-  // Helper: Y base for a given floor
-  // floorBase: base elevation for elements not inside a room
-  // For floor 0: follows raw terrain (slopeOffset is added per-element)
-  // For floor 1: uses average ground-floor room elevation + wallH, so standalone
-  //              upper-floor walls/items sit at the right height
-  const avgGroundElev = ()=>{
-    let sum=0,count=0;
-    for(const[room,elev] of roomElevMap){if((room.floor||0)===0){sum+=elev;count++;}}
-    return count>0?sum/count:0;
-  };
-  const floorBase = f => f===0 ? 0 : avgGroundElev()+wallH+FLOOR_SEP;
-
   let ri=0;
 
-  // Build per-room elevation map
-  // Ground floor: level platform at its lowest-slope corner (like a real foundation)
-  // Upper floor: sits on top of the ground-floor room directly below it
+  // ── Clean elevation model ──────────────────────────────────────────────────
+  // Each room owns its floor elevation explicitly (el.elevation, in scene ft).
+  // If not set, it defaults to the terrain height at the room's centre.
+  // This makes the system transparent: user can read and edit elevation directly.
+
   const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area'];
-  const roomElevMap=new Map();
-  // Floor cutouts: suppress planks in these 2D regions
   const floorCutouts=elements.filter(e=>e.type==='furniture'&&e.ftype==='floor-cutout');
-  const groundRooms=elements.filter(e=>e.type==='room'&&(e.floor||0)===0);
-  const upperRooms =elements.filter(e=>e.type==='room'&&(e.floor||0)===1);
 
-  // Pass 1: ground floor rooms
-  groundRooms.forEach(room=>{
-    const rx3=room.x/PX_PER_FT-cx, rz3=room.y/PX_PER_FT-cz;
-    const rx3b=(room.x+room.w)/PX_PER_FT-cx, rz3b=(room.y+room.h)/PX_PER_FT-cz;
-    const minSlopeY=Math.min(slopeOffset(rx3,rz3),slopeOffset(rx3b,rz3),slopeOffset(rx3,rz3b),slopeOffset(rx3b,rz3b));
-    roomElevMap.set(room, minSlopeY); // yBase = just the slope offset; floorBase(0)=0
-  });
-
-  // Helper: given a 2D rect, find the ground-floor room with most overlap
-  function groundElevBelow(x,y,w,h){
-    let bestOverlap=0, bestElev=null;
-    for(const [room,elev] of roomElevMap){
-      if((room.floor||0)!==0) continue;
-      const ox=Math.max(0, Math.min(x+w,room.x+room.w)-Math.max(x,room.x));
-      const oz=Math.max(0, Math.min(y+h,room.y+room.h)-Math.max(y,room.y));
-      const overlap=ox*oz;
-      if(overlap>bestOverlap){bestOverlap=overlap;bestElev=elev;}
-    }
-    if(bestElev!==null) return bestElev;
-    // No ground room below — use average of all ground room elevations, or 0
-    if(roomElevMap.size>0){
-      let sum=0,count=0;
-      for(const[room,elev] of roomElevMap){if((room.floor||0)===0){sum+=elev;count++;}}
-      return count>0?sum/count:0;
-    }
-    return 0;
+  // Compute terrain Y at a canvas-px position
+  function terrainAt(px2d, py2d){
+    return slopeOffset(px2d/PX_PER_FT-cx, py2d/PX_PER_FT-cz);
   }
 
-  // Pass 2: upper floor rooms sit on top of whatever ground floor is below them
-  upperRooms.forEach(room=>{
-    const groundElev=groundElevBelow(room.x,room.y,room.w,room.h);
-    roomElevMap.set(room, groundElev+wallH+FLOOR_SEP);
-  });
-  function containingRoomElev(ex2d,ey2d,floor){
-    for(const[room,elev] of roomElevMap){
-      if((room.floor||0)!==floor)continue;
-      if(ex2d>=room.x&&ex2d<=room.x+room.w&&ey2d>=room.y&&ey2d<=room.y+room.h)return elev;
+  // Resolve a ground-floor room's Y elevation
+  function groundRoomElev(room){
+    if(room.elevation!=null) return room.elevation;
+    // Default: terrain at room centre
+    return terrainAt(room.x+room.w/2, room.y+room.h/2);
+  }
+
+  // Find ground-floor room with most 2D overlap with a given rect
+  function bestGroundRoomBelow(x,y,w,h){
+    let best=null, bestArea=0;
+    for(const r of elements){
+      if(r.type!=='room'||(r.floor||0)!==0) continue;
+      const ox=Math.max(0,Math.min(x+w,r.x+r.w)-Math.max(x,r.x));
+      const oz=Math.max(0,Math.min(y+h,r.y+r.h)-Math.max(y,r.y));
+      if(ox*oz>bestArea){bestArea=ox*oz;best=r;}
+    }
+    return best;
+  }
+
+  // Resolve any room's Y elevation
+  function roomElev(room){
+    const fl=room.floor||0;
+    if(fl===0) return groundRoomElev(room);
+    // Upper floor: sits on the ground room below it
+    if(room.elevation!=null) return room.elevation; // explicit override
+    const below=bestGroundRoomBelow(room.x,room.y,room.w,room.h);
+    const groundY=below ? groundRoomElev(below) : terrainAt(room.x+room.w/2, room.y+room.h/2);
+    return groundY+wallH+FLOOR_SEP;
+  }
+
+  // Find the room that contains a 2D point on a given floor
+  function containingRoom(px2d,py2d,floor){
+    for(const r of elements){
+      if(r.type!=='room'||(r.floor||0)!==floor) continue;
+      if(px2d>=r.x&&px2d<=r.x+r.w&&py2d>=r.y&&py2d<=r.y+r.h) return r;
     }
     return null;
   }
 
   for(const el of elements){
     const fl=el.floor||0;
-    let _ecx3=0,_ecz3=0;
-    if(el.type==='room'){_ecx3=(el.x+el.w/2)/PX_PER_FT-cx;_ecz3=(el.y+el.h/2)/PX_PER_FT-cz;}
-    else if(el.type==='wall'){_ecx3=(el.x1+el.x2)/2/PX_PER_FT-cx;_ecz3=(el.y1+el.y2)/2/PX_PER_FT-cz;}
-    else{_ecx3=el.x/PX_PER_FT-cx;_ecz3=el.y/PX_PER_FT-cz;}
-    const terrainYBase=floorBase(fl)+slopeOffset(_ecx3,_ecz3);
+
+    // Compute element centre in 3D for terrain lookup
+    let ex3=0,ez3=0;
+    if(el.type==='room'){ex3=(el.x+el.w/2)/PX_PER_FT-cx;ez3=(el.y+el.h/2)/PX_PER_FT-cz;}
+    else if(el.type==='wall'){ex3=(el.x1+el.x2)/2/PX_PER_FT-cx;ez3=(el.y1+el.y2)/2/PX_PER_FT-cz;}
+    else{ex3=el.x/PX_PER_FT-cx;ez3=el.y/PX_PER_FT-cz;}
+
     let yBase;
     if(el.type==='room'){
-      yBase=roomElevMap.get(el)??terrainYBase;
-    } else if(el.type==='furniture'&&OUTDOOR_FTYPES.includes(el.ftype)){
-      // Outdoor elements sit on pure terrain — never on a floor platform
-      yBase=slopeOffset(_ecx3,_ecz3);
-    } else if(el.type==='furniture'&&el.ftype==='floor-cutout'){
-      // Floor cutout must always sit at its floor's base elevation, not terrain
-      yBase=floorBase(fl)+slopeOffset(_ecx3,_ecz3);
+      yBase=roomElev(el);
+    } else if(el.type==='furniture'&&(OUTDOOR_FTYPES.includes(el.ftype)||el.ftype==='floor-cutout')){
+      // Outdoor + cutout: follow terrain (cutout's floor-level comes from its fl)
+      const base = fl===1 ? (()=>{
+        const below=bestGroundRoomBelow(el.x,el.y,1,1);
+        return below ? groundRoomElev(below)+wallH+FLOOR_SEP : slopeOffset(ex3,ez3);
+      })() : slopeOffset(ex3,ez3);
+      yBase=base;
     } else if(el.type==='furniture'||el.type==='door'||el.type==='window'){
-      yBase=containingRoomElev(el.x,el.y,fl)??terrainYBase;
+      const room=containingRoom(el.x,el.y,fl);
+      yBase=room ? roomElev(room) : slopeOffset(ex3,ez3)+(fl===1?wallH+FLOOR_SEP:0);
     } else if(el.type==='wall'&&el.landscape){
-      yBase=slopeOffset(_ecx3,_ecz3);
+      yBase=slopeOffset(ex3,ez3);
     } else if(el.type==='wall'){
       const mx2d=(el.x1+el.x2)/2, my2d=(el.y1+el.y2)/2;
-      yBase=containingRoomElev(mx2d,my2d,fl)??terrainYBase;
+      const room=containingRoom(mx2d,my2d,fl);
+      yBase=room ? roomElev(room) : slopeOffset(ex3,ez3);
     } else {
-      yBase=terrainYBase;
+      yBase=slopeOffset(ex3,ez3);
     }
 
     if(el.type==='room'){
