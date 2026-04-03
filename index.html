@@ -2177,63 +2177,46 @@ function rebuild3d(){
           box3(0.05,stairH,treadD,0x8a6a40,-stairW/2+0.04,stairH/2,0);
           box3(0.05,stairH,treadD,0x8a6a40, stairW/2-0.04,stairH/2,0);
         } else if(t==='stairs-landing'){
-          // Switchback stair — completely rebuilt.
+          // Free-floating switchback stairs — treads and landing slab only, no fill.
           //
-          // Layout:  [Run1: zBot→zR1end] [Landing] [Run2: zR2start→zTop]
-          //
-          // Run 1 (left half, x<0): walks from zBot (+Z), rising 0 → stairH/2
-          // Run 2 (right half, x>0): walks from zTop (-Z, reversed), rising stairH/2 → stairH
-          //   — person crosses landing then walks BACK the way they came, but keeps going up.
-          //
-          // Each step = cumulative fill wedge (solid from baseY to tread) + thin bright tread slab.
-          // The cumulative wedge naturally shows steps on the face the camera sees.
-          // Run 2's fill starts at stairH/2 (landing level), not at 0.
+          // fw=8, fh=12 (default).  runW = fw/2 = 4ft per run.
+          // Z layout: [Run1: zBot→zR1end] [Landing: zR1end→zR2start] [Run2: zR2start→zTop]
+          // Run 1 (x centre = -runW/2): treads travel +Z, y rises 0 → stairH/2
+          // Run 2 (x centre = +runW/2): treads travel -Z (reversed), y rises stairH/2 → stairH
 
-          const runW  = stairW / 2;
-          const landD = Math.max(runW, treadD * 0.18);
-          const runD  = (treadD - landD) / 2;
-          const nT    = Math.max(4, Math.round(runD * 3.0));
-          const rH    = (stairH / 2) / nT;
-          const tD    = runD / nT;
+          const runW   = stairW / 2;               // 4 ft
+          const landD  = runW;                     // landing depth = one run width (square-ish)
+          const runD   = (treadD - landD) / 2;     // depth for each run
+          const nT     = Math.max(4, Math.round(runD * 2.5));
+          const rH     = (stairH / 2) / nT;        // riser height per step
+          const tSlabH = Math.max(0.06, rH * 0.18); // tread slab thickness
+          const tD     = runD / nT;                // tread horizontal depth
 
           const zBot     = -treadD / 2;
           const zR1end   = zBot + runD;
           const zR2start = zR1end + landD;
-          const zTop     = zR2start + runD;
+          const zTop     = zR2start + runD;        // = +treadD/2
 
-          const treadC = 0xe8e0c8;
-          const fillC  = 0xc8bc98;
+          const treadC = 0xe0d8c0;
 
-          // ── Run 1: left half, steps go in +Z ──────────────────────────────────
-          // Step i rises from 0 to rH*(i+1).  Fill: full height of that step.
-          // Tread z-centre: zBot + tD*(i+0.5)
+          // ── Run 1: left half, +Z direction ───────────────────────────────────
           for(let i = 0; i < nT; i++){
-            const stepTopY = rH * (i + 1);
-            const stepZ    = zBot + tD * (i + 0.5);
-            // Cumulative fill from y=0 up to tread underside
-            box3(runW, stepTopY, tD, fillC, -runW/2, stepTopY/2, stepZ);
-            // Bright tread slab on top
-            box3(runW + 0.06, rH * 0.15, tD + 0.06, treadC, -runW/2, stepTopY + rH*0.075, stepZ);
+            const y = rH * i;                      // tread top surface y
+            const z = zBot + tD * (i + 0.5);      // tread centre z
+            box3(runW, tSlabH, tD, treadC, -runW/2, y + tSlabH/2, z);
           }
 
-          // ── Landing ────────────────────────────────────────────────────────────
-          // Full-width slab flush with top of run 1 (stairH/2)
-          box3(stairW, rH * 0.15, landD, treadC, 0, stairH/2 + rH*0.075, zR1end + landD/2);
-          // Structural fill under the landing
-          box3(stairW, stairH/2, landD, fillC, 0, stairH/4, zR1end + landD/2);
+          // ── Landing: full width (stairW), flat slab at stairH/2 ──────────────
+          box3(stairW, tSlabH, landD, treadC, 0, stairH/2 + tSlabH/2, zR1end + landD/2);
 
-          // ── Run 2: right half, steps go in -Z (from zTop back toward zR2start) ──
-          // Step i rises from stairH/2 to stairH/2 + rH*(i+1).
-          // Fill starts at stairH/2 (not 0) — sits above the landing-height datum.
-          // Step z-centre: zTop - tD*(i+0.5)  (stepping back in -Z)
+          // ── Run 2: right half, -Z direction (reversed) ───────────────────────
+          // Tread 0 is nearest zTop (far end), tread nT-1 is nearest the landing.
+          // y increases from stairH/2 as you go away from landing (i.e. toward zTop).
+          // Person walks from landing at zR2start toward zTop, rising each step.
           for(let i = 0; i < nT; i++){
-            const stepTopY = stairH/2 + rH * (i + 1);
-            const stepZ    = zTop - tD * (i + 0.5);
-            // Fill from stairH/2 up to tread underside
-            const fillH = rH * (i + 1);          // height above the stairH/2 datum
-            box3(runW, fillH, tD, fillC, runW/2, stairH/2 + fillH/2, stepZ);
-            // Bright tread slab on top
-            box3(runW + 0.06, rH * 0.15, tD + 0.06, treadC, runW/2, stepTopY + rH*0.075, stepZ);
+            const y = stairH/2 + rH * i;          // tread top surface y (rises away from landing)
+            const z = zTop - tD * (i + 0.5);      // tread centre z (steps from zTop back toward zR2start)
+            box3(runW, tSlabH, tD, treadC, runW/2, y + tSlabH/2, z);
           }
 
         } else {
