@@ -524,6 +524,60 @@ function floorStrokeColor(el, selColor, normalDark, normalLight) {
 // ══════════════════════════════════════════════════
 // DRAW ELEMENTS
 // ══════════════════════════════════════════════════
+function drawRoof(el, sel) {
+  const dark=isDark();
+  ctx.globalAlpha=floorAlpha(el);
+  const col=sel?'#A78BFA':'#7C3AED';
+
+  // Semi-transparent fill
+  ctx.fillStyle=sel?'rgba(139,92,246,0.18)':'rgba(124,58,237,0.12)';
+  ctx.fillRect(el.x,el.y,el.w,el.h);
+
+  // Bold solid border
+  ctx.strokeStyle=col; ctx.lineWidth=sel?3:2.5; ctx.setLineDash([]);
+  ctx.strokeRect(el.x,el.y,el.w,el.h);
+
+  // Ridge / slope indicator (dashed)
+  ctx.strokeStyle=col; ctx.lineWidth=sel?2:1.5; ctx.setLineDash([5,3]);
+  const rd=el.ridgeDir||'EW';
+  if(el.rtype==='gable'||el.rtype==='hip'){
+    if(rd==='EW'){ctx.beginPath();ctx.moveTo(el.x,el.y+el.h/2);ctx.lineTo(el.x+el.w,el.y+el.h/2);ctx.stroke();}
+    else{ctx.beginPath();ctx.moveTo(el.x+el.w/2,el.y);ctx.lineTo(el.x+el.w/2,el.y+el.h);ctx.stroke();}
+  } else if(el.rtype==='shed'){
+    const mx=el.x+el.w/2,my=el.y+el.h*0.35;
+    ctx.beginPath();ctx.moveTo(mx,my+el.h*0.3);ctx.lineTo(mx,my);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(mx-8,my+10);ctx.lineTo(mx,my);ctx.lineTo(mx+8,my+10);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Corner-to-ridge diagonal lines (standard roof plan convention)
+  ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  if(el.rtype==='gable'||el.rtype==='hip'){
+    const r1=rd==='EW'?{x:el.x,y:el.y+el.h/2}:{x:el.x+el.w/2,y:el.y};
+    const r2=rd==='EW'?{x:el.x+el.w,y:el.y+el.h/2}:{x:el.x+el.w/2,y:el.y+el.h};
+    [[el.x,el.y],[el.x+el.w,el.y],[el.x,el.y+el.h],[el.x+el.w,el.y+el.h]].forEach(([cx3,cy3])=>{
+      const pt=Math.hypot(cx3-r1.x,cy3-r1.y)<Math.hypot(cx3-r2.x,cy3-r2.y)?r1:r2;
+      ctx.beginPath();ctx.moveTo(cx3,cy3);ctx.lineTo(pt.x,pt.y);ctx.stroke();
+    });
+  }
+  ctx.setLineDash([]);
+
+  // Label
+  const labels={flat:'FLAT',shed:'SHED',gable:'GABLE',hip:'HIP'};
+  ctx.font=`bold ${Math.min(11,el.w*0.08)}px -apple-system,sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle=sel?'rgba(139,92,246,0.9)':'rgba(124,58,237,0.78)';
+  const ly=el.y+el.h/2+(el.rtype==='flat'?0:-8);
+  ctx.fillText(`${labels[el.rtype]||el.rtype.toUpperCase()} ${el.pitch??6}/12`,el.x+el.w/2,ly);
+  if(el.rtype!=='flat'){
+    ctx.font=`${Math.min(9,el.w*0.07)}px -apple-system,sans-serif`;
+    ctx.fillStyle=sel?'rgba(139,92,246,0.6)':'rgba(124,58,237,0.5)';
+    ctx.fillText(`${(el.w/PX_PER_FT).toFixed(0)}×${(el.h/PX_PER_FT).toFixed(0)} ft`,el.x+el.w/2,el.y+el.h/2+8);
+  }
+  ctx.textAlign='left'; ctx.globalAlpha=1;
+  if(sel) drawHandles(el);
+}
+
 function drawWall(el, sel) {
   const dark=isDark(), alpha=floorAlpha(el);
   ctx.globalAlpha=alpha;
@@ -1022,6 +1076,7 @@ function render2d() {
     const isSel=(el===selected)||multiSel.includes(el);
     if      (el.type==='wall')      drawWall(el,isSel);
     else if (el.type==='room')      drawRoom(el,isSel);
+    else if (el.type==='roof')      drawRoof(el,isSel);
     else if (el.type==='window')    drawWindow(el,isSel);
     else if (el.type==='door')      drawDoor(el,isSel);
     else if (el.type==='furniture') drawFurniture(el,isSel);
