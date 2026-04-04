@@ -97,6 +97,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 #panel-3d-footer .auto-note { font-size:11px; color:rgba(255,255,255,0.25); margin-left:auto; }
 .floor-btn { padding:3px 8px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text2); font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
 .floor-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500; }
+.layer-btn { padding:3px 8px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text2); font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.layer-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500; }
+.vis-btn { padding:3px 8px; border:0.5px solid var(--border2); border-radius:var(--radius); background:var(--bg2); color:var(--text); font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.vis-btn:not(.active) { background:transparent; color:var(--text3); border-style:dashed; opacity:0.5; }
 </style>
 </head>
 <body>
@@ -121,9 +125,15 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 <div id="topbar">
   <h1 title="Floorplan Designer">FP</h1>
   <div class="tb-sep"></div>
-  <button class="layer-btn active" data-layer="0" title="Ground floor · Ctrl+click to toggle visibility">G</button>
-  <button class="layer-btn" data-layer="1" title="Upper floor · Ctrl+click to toggle visibility">U</button>
-  <button class="layer-btn" data-layer="roof" title="Roof · Ctrl+click to toggle visibility">R</button>
+  <span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">Draw:</span>
+  <button class="layer-btn active" data-layer="0" title="Draw on ground floor">G</button>
+  <button class="layer-btn" data-layer="1" title="Draw on upper floor">U</button>
+  <button class="layer-btn" data-layer="roof" title="Place roofs">R</button>
+  <div class="tb-sep"></div>
+  <span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">Show:</span>
+  <button class="vis-btn active" data-vis="0" title="Toggle ground floor visibility">G</button>
+  <button class="vis-btn active" data-vis="1" title="Toggle upper floor visibility">U</button>
+  <button class="vis-btn active" data-vis="roof" title="Toggle roof visibility">R</button>
   <div class="tb-sep"></div>
   <button class="dd-btn" id="dd-draw-btn" title="Draw tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14l1.5-4L11 2.5l2.5 2.5-7.5 7.5L2 14z"/></svg>Draw ▾</button>
   <button class="dd-btn" id="dd-open-btn" title="Doors &amp; Windows"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="13"/><path d="M3 1 A6 6 0 0 1 9 7"/></svg>Open ▾</button>
@@ -191,8 +201,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <div id="panel-3d-header">
         <span class="ph-title">3D Preview</span>
         <span class="ph-hint">Drag to orbit · scroll to zoom</span>
-        <button class="ph-btn" id="vis-fl-0" title="Show/hide ground floor" style="border-color:rgba(255,255,255,0.4);color:#fff">G</button>
-        <button class="ph-btn" id="vis-fl-1" title="Show/hide upper floor" style="border-color:rgba(255,255,255,0.4);color:#fff">U</button>
+        <span style="font-size:9px;color:rgba(255,255,255,0.4)">Show</span>
+        <button class="ph-btn" id="vis-fl-0" title="Toggle ground floor">G</button>
+        <button class="ph-btn" id="vis-fl-1" title="Toggle upper floor">U</button>
+        <button class="ph-btn" id="vis-roof" title="Toggle roof">R</button>
         <button class="ph-btn" id="btn-3d-wider" title="Wider">&#x2190;&#x2192;</button>
         <button class="ph-btn" id="btn-3d-narrower" title="Narrower">&#x2192;&#x2190;</button>
         <button class="ph-btn" id="btn-3d-fullscreen" title="Fullscreen">&#x26F6;</button>
@@ -246,23 +258,20 @@ const layerVisible = {0:true, 1:true, roof:true};
 function setLayer(layer) {
   currentLayer = layer;
   currentFloor = (layer === 'roof') ? 0 : +layer;
-  // Sync 2D layer buttons
+  // Sync draw-layer buttons
   document.querySelectorAll('.layer-btn').forEach(b => {
     const bl = (b.dataset.layer === 'roof') ? 'roof' : +b.dataset.layer;
-    b.classList.toggle('active',  bl === layer);
-    b.classList.toggle('dimmed', !layerVisible[bl]);
+    b.classList.toggle('active', bl === layer);
   });
-  // Sync 3D panel buttons
-  syncVis3dBtns();
   selected = null; multiSel = []; updateProps(); render2d();
 }
 
 function toggleLayerVisible(layer) {
   layerVisible[layer] = !layerVisible[layer];
-  // Dim/un-dim 2D buttons
-  document.querySelectorAll('.layer-btn').forEach(b => {
-    const bl = (b.dataset.layer === 'roof') ? 'roof' : +b.dataset.layer;
-    b.classList.toggle('dimmed', !layerVisible[bl]);
+  // Sync 2D vis buttons
+  document.querySelectorAll('.vis-btn').forEach(b => {
+    const bl = (b.dataset.vis === 'roof') ? 'roof' : +b.dataset.vis;
+    b.classList.toggle('active', !!layerVisible[bl]);
   });
   syncVis3dBtns();
   if (typeof applyFloorVisibility === 'function') applyFloorVisibility();
@@ -404,15 +413,18 @@ function saveHistory() {
 // FLOOR SWITCHER
 // ══════════════════════════════════════════════════
 const FLOOR_NAMES = ['Ground floor', 'Upper floor'];
-// Layer buttons (2D topbar G / U / R)
-// Single-click = switch active layer; Ctrl+click or double-click = toggle visibility
+// Draw-layer buttons: click = set active drawing layer
 document.querySelectorAll('.layer-btn').forEach(btn => {
-  let _t = null;
-  btn.addEventListener('click', e => {
+  btn.addEventListener('click', () => {
     const layer = (btn.dataset.layer === 'roof') ? 'roof' : +btn.dataset.layer;
-    if (e.ctrlKey || e.metaKey) { toggleLayerVisible(layer); return; }
-    if (_t) { clearTimeout(_t); _t = null; toggleLayerVisible(layer); return; }
-    _t = setTimeout(() => { _t = null; setLayer(layer); }, 200);
+    setLayer(layer);
+  });
+});
+// Visibility buttons: click = toggle layer visibility
+document.querySelectorAll('.vis-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const layer = (btn.dataset.vis === 'roof') ? 'roof' : +btn.dataset.vis;
+    toggleLayerVisible(layer);
   });
 });
 
@@ -2158,7 +2170,7 @@ function rebuild3d(){
   function addFP(obj, fl) {
     obj.userData.fp = true;
     obj.userData.floorNum = fl;
-    obj.visible = !!floorVisible[fl];
+    obj.visible = !!layerVisible[fl];
     scene3.add(obj);
     return obj;
   }
