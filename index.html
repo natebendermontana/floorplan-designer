@@ -114,7 +114,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="tb-icon" id="btn-undo" title="Undo (⌘Z)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1 1 1.5 4"/><path d="M2 4v4h4"/></svg></button>
   <button class="tb-icon" id="btn-clear" title="Clear all"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
   <div class="tb-sep"></div>
-  <button class="tb-icon" id="btn-save" title="Save plan (JSON)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 13H3V3l3 0v3h5V3l2 2v8z"/><rect x="5" y="9" width="6" height="4"/></svg></button>
+  <span id="dirty-ind" title="Unsaved changes" style="width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:0;flex-shrink:0;transition:opacity 0.2s;margin-right:-2px;align-self:center"></span><button class="tb-icon" id="btn-save" title="Open plans (save/load)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 13H3V3l3 0v3h5V3l2 2v8z"/><rect x="5" y="9" width="6" height="4"/></svg></button>
   <button class="tb-icon" id="btn-load" title="Load plan"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h5l2 2h3v8H3z"/></svg></button>
   <input type="file" id="file-input" accept=".json" style="display:none">
   <div class="tb-sep"></div>
@@ -223,6 +223,7 @@ let tool = 'select';
 let currentFloor = 0;            // 0 = ground, 1 = upper
 let drawing = false, previewStart = null, previewEnd = null;
 let dragEl = null, dragStart = null;
+let activeSnapHint = null; // {x,y} canvas px — drawn as indicator during drag
 let dragMultiOrigins = null;
 let activeHandle = null;
 let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
@@ -264,6 +265,53 @@ function switchToSelect(newEl) {
   if (newEl) { selected = newEl; multiSel = []; updateProps(); }
 }
 const snapPt = (x,y) => ({x:snap(x), y:snap(y)});
+
+// geometricSnap: given a candidate point (cx,cy) after grid-snap,
+// check all OTHER elements for nearby edges/endpoints and snap to them.
+// Returns {x,y} (possibly adjusted) and sets activeSnapHint.
+const GEO_SNAP_DIST = () => Math.max(8, PX_PER_FT * 0.5); // 0.5ft in canvas px
+function geometricSnap(cx, cy, movingEl) {
+  const d = GEO_SNAP_DIST();
+  let bestDist = d, sx = cx, sy = cy;
+  activeSnapHint = null;
+
+  // Collect candidate snap points from all elements except the one being moved
+  const candidates = [];
+  elements.forEach(el => {
+    if(el === movingEl) return;
+    if(el.type === 'room'){
+      // 4 edges: north, south, west, east
+      candidates.push({x: el.x,       y: null,  axis:'x'}); // west edge
+      candidates.push({x: el.x+el.w,  y: null,  axis:'x'}); // east edge
+      candidates.push({x: null,        y: el.y,  axis:'y'}); // north edge
+      candidates.push({x: null,        y: el.y+el.h, axis:'y'}); // south edge
+    }
+    if(el.type === 'wall'){
+      candidates.push({x: el.x1, y: el.y1, axis:'both'});
+      candidates.push({x: el.x2, y: el.y2, axis:'both'});
+    }
+  });
+
+  // Try each candidate
+  candidates.forEach(c => {
+    if(c.axis === 'x' || c.axis === 'both'){
+      const dist = Math.abs(cx - c.x);
+      if(dist < bestDist){ bestDist=dist; sx=c.x; activeSnapHint={x:c.x, y:cy}; }
+    }
+    if(c.axis === 'y' || c.axis === 'both'){
+      const dist = Math.abs(cy - c.y);
+      if(dist < bestDist){ bestDist=dist; sy=c.y; activeSnapHint={x:cx, y:c.y}; }
+    }
+    if(c.axis === 'both'){
+      const dist = Math.hypot(cx-c.x, cy-c.y);
+      if(dist < bestDist*1.5 && dist < d){
+        bestDist=dist; sx=c.x; sy=c.y; activeSnapHint={x:c.x, y:c.y};
+      }
+    }
+  });
+
+  return {x:sx, y:sy};
+}
 const isDark = () => window.matchMedia('(prefers-color-scheme:dark)').matches;
 const dl = (blob,name) => { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); };
 
@@ -288,6 +336,7 @@ function elCenter(el) {
 }
 function saveHistory() {
   history.push(JSON.parse(JSON.stringify(elements)));
+  markDirty();
   if (history.length > 60) history.shift();
 }
 
@@ -360,8 +409,8 @@ function applyResize(el, role, mx, my, origin, mouseStart) {
     if(role==='sw'||role==='s'||role==='se'){h=Math.max(SNAP(),snap(origin.h+dy));}
     el.x=x;el.y=y;el.w=w;el.h=h;
   } else if (el.type==='wall') {
-    if(role==='p1'){el.x1=snap(origin.x1+dx);el.y1=snap(origin.y1+dy);}
-    if(role==='p2'){el.x2=snap(origin.x2+dx);el.y2=snap(origin.y2+dy);}
+    if(role==='p1'){const gs=geometricSnap(snap(origin.x1+dx),snap(origin.y1+dy),el);el.x1=gs.x;el.y1=gs.y;}
+    if(role==='p2'){const gs=geometricSnap(snap(origin.x2+dx),snap(origin.y2+dy),el);el.x2=gs.x;el.y2=gs.y;}
   } else if (el.type==='furniture') {
     const ang=origin.angle||0;
     const ldx=dx*Math.cos(ang)+dy*Math.sin(ang), ldy=-dx*Math.sin(ang)+dy*Math.cos(ang);
@@ -981,6 +1030,16 @@ function render2d() {
     ctx.fillStyle='rgba(59,130,246,0.08)';
     ctx.fillRect(rsx,rsy,rsw,rsh); ctx.strokeRect(rsx,rsy,rsw,rsh); ctx.setLineDash([]);
   }
+  // Geometric snap indicator — amber crosshair shown during snapped drag
+  if(activeSnapHint){
+    const sx=activeSnapHint.x*viewZoom+viewOX, sy=activeSnapHint.y*viewZoom+viewOY;
+    ctx.save(); ctx.resetTransform();
+    ctx.strokeStyle='#F59E0B'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(sx,sy,7,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx-11,sy); ctx.lineTo(sx+11,sy);
+    ctx.moveTo(sx,sy-11); ctx.lineTo(sx,sy+11); ctx.stroke();
+    ctx.restore();
+  }
   ctx.restore();
   updateAreas();
   if (panel3dOpen) rebuild3d();
@@ -1056,11 +1115,27 @@ canvas2d.addEventListener('mousemove',e=>{
   if(dragEl&&dragStart){
     const dx=x-dragStart.x, dy=y-dragStart.y;
     const targets=multiSel.length>1?multiSel:[dragEl];
+    activeSnapHint=null;
     targets.forEach((el,i)=>{
       const o=dragMultiOrigins[i];
-      if(el.type==='wall'){el.x1=snap(o.x1+dx);el.y1=snap(o.y1+dy);el.x2=snap(o.x2+dx);el.y2=snap(o.y2+dy);}
-      else if(el.type==='room'){el.x=snap(o.x+dx);el.y=snap(o.y+dy);}
-      else{el.x=snap(o.x+dx);el.y=snap(o.y+dy);}
+      if(el.type==='wall'){
+        // Snap wall endpoints independently
+        const p1=geometricSnap(snap(o.x1+dx), snap(o.y1+dy), el);
+        const p2=geometricSnap(snap(o.x2+dx), snap(o.y2+dy), el);
+        el.x1=p1.x; el.y1=p1.y; el.x2=p2.x; el.y2=p2.y;
+      } else if(el.type==='room'){
+        const gs=geometricSnap(snap(o.x+dx), snap(o.y+dy), el);
+        // Also try snapping right/bottom edge
+        const gs2=geometricSnap(snap(o.x+o.w+dx), snap(o.y+o.h+dy), el);
+        // Use whichever produced a snap (activeSnapHint set by last call)
+        el.x = (activeSnapHint && Math.abs(gs2.x-(o.x+o.w+dx))<Math.abs(gs.x-(o.x+dx)))
+          ? gs2.x - o.w : gs.x;
+        el.y = (activeSnapHint && Math.abs(gs2.y-(o.y+o.h+dy))<Math.abs(gs.y-(o.y+dy)))
+          ? gs2.y - o.h : gs.y;
+      } else {
+        const gs=geometricSnap(snap(o.x+dx), snap(o.y+dy), el);
+        el.x=gs.x; el.y=gs.y;
+      }
     });
     render2d();return;
   }
@@ -1147,7 +1222,7 @@ canvas2d.addEventListener('mouseup',e=>{
   const{x,y}=getPos(e);
   if(tool==='rect-select'&&rectSelActive){rectSelActive=false;rectSelect();rectSelStart=null;rectSelEnd=null;render2d();return;}
   if(activeHandle){saveHistory();activeHandle=null;render2d();return;}
-  if(dragEl){dragEl=null;dragStart=null;dragMultiOrigins=null;saveHistory();return;}
+  if(dragEl){dragEl=null;dragStart=null;dragMultiOrigins=null;activeSnapHint=null;saveHistory();return;}
   if(!drawing)return;
   const sp=snapPt(x,y);
   if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'){
@@ -1356,14 +1431,139 @@ document.addEventListener('click', e => {
 // ══════════════════════════════════════════════════
 document.getElementById('btn-undo').addEventListener('click',()=>{if(history.length){elements=history.pop();selected=null;multiSel=[];updateProps();render2d();}});
 document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();render2d();}});
-document.getElementById('btn-save').addEventListener('click',()=>{dl(new Blob([JSON.stringify({version:2,pxPerFt:PX_PER_FT,gridFt:GRID_FT,elements},null,2)],{type:'application/json'}),'floorplan.json');});
-document.getElementById('btn-load').addEventListener('click',()=>document.getElementById('file-input').click());
-document.getElementById('file-input').addEventListener('change',e=>{
-  const file=e.target.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=ev=>{try{const data=JSON.parse(ev.target.result);saveHistory();elements=data.elements||[];elements.forEach(el=>{if(el.floor===undefined)el.floor=0;});if(data.pxPerFt){PX_PER_FT=data.pxPerFt;document.getElementById('scale-input').value=PX_PER_FT;}if(data.gridFt){GRID_FT=data.gridFt;document.getElementById('grid-input').value=GRID_FT;}selected=null;multiSel=[];updateProps();render2d();}catch{alert('Could not load file.');}};
-  reader.readAsText(file);e.target.value='';
+// ── Save / Load system ──────────────────────────────────────────────────────
+const LS_KEY = 'fp_plans_v1';
+const LS_AUTO = 'fp_autosave_v1';
+let isDirty = false;
+
+function getSettings(){
+  return {
+    pxPerFt: PX_PER_FT, gridFt: GRID_FT,
+    lotW: document.getElementById('lot-w').value,
+    lotH: document.getElementById('lot-h').value,
+    wallH: document.getElementById('wall-height-input').value,
+    slopeLo: document.getElementById('slope-low-input').value,
+    slopeHi: document.getElementById('slope-high-input').value,
+    slopeDir: document.getElementById('slope-dir-input').value,
+  };
+}
+function applySettings(s){
+  if(!s) return;
+  if(s.pxPerFt){PX_PER_FT=s.pxPerFt;document.getElementById('scale-input').value=PX_PER_FT;}
+  if(s.gridFt){GRID_FT=s.gridFt;document.getElementById('grid-input').value=GRID_FT;}
+  if(s.lotW) document.getElementById('lot-w').value=s.lotW;
+  if(s.lotH) document.getElementById('lot-h').value=s.lotH;
+  if(s.wallH) document.getElementById('wall-height-input').value=s.wallH;
+  if(s.slopeLo!=null) document.getElementById('slope-low-input').value=s.slopeLo;
+  if(s.slopeHi!=null) document.getElementById('slope-high-input').value=s.slopeHi;
+  if(s.slopeDir) document.getElementById('slope-dir-input').value=s.slopeDir;
+}
+
+function planData(){ return {version:3, ts:Date.now(), settings:getSettings(), elements}; }
+function loadPlanData(data){
+  saveHistory();
+  elements = (data.elements||[]).map(el=>({...el, floor:el.floor??0}));
+  applySettings(data.settings || {pxPerFt:data.pxPerFt, gridFt:data.gridFt});
+  selected=null; multiSel=[]; updateProps(); render2d();
+  if(panel3dOpen) rebuild3d();
+  markClean();
+}
+
+function markDirty(){
+  isDirty=true;
+  const ind=document.getElementById('dirty-ind');
+  if(ind) ind.style.opacity='1';
+  // Auto-save to localStorage on every change (debounced)
+  clearTimeout(markDirty._t);
+  markDirty._t=setTimeout(()=>{
+    try{ localStorage.setItem(LS_AUTO, JSON.stringify(planData())); }catch(e){}
+  }, 800);
+}
+function markClean(){
+  isDirty=false;
+  const ind=document.getElementById('dirty-ind');
+  if(ind) ind.style.opacity='0';
+}
+
+function getPlans(){
+  try{ return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }catch{return {};}
+}
+function savePlans(plans){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(plans)); }catch(e){ alert('Storage full.'); }
+}
+
+// ── Modal UI ────────────────────────────────────────────────────────────────
+function openSlModal(){
+  renderSlList();
+  const modal=document.getElementById('sl-modal');
+  modal.style.display='flex';
+  document.getElementById('sl-name').focus();
+}
+function closeSlModal(){ document.getElementById('sl-modal').style.display='none'; }
+
+function renderSlList(){
+  const plans=getPlans();
+  const list=document.getElementById('sl-list');
+  const keys=Object.keys(plans).sort((a,b)=>(plans[b].ts||0)-(plans[a].ts||0));
+  if(!keys.length){
+    list.innerHTML='<span style="font-size:11px;color:var(--text3);padding:4px 0">No saved plans yet</span>';
+    return;
+  }
+  list.innerHTML=keys.map(k=>{
+    const d=new Date(plans[k].ts||0);
+    const dateStr=d.getFullYear()>2000?d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';
+    return `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:var(--radius);background:var(--bg2)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${k}</div>
+        <div style="font-size:10px;color:var(--text3)">${dateStr}</div>
+      </div>
+      <button onclick="loadPlan('${k.replace(/'/g,"\\'")}');closeSlModal();" style="padding:3px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--accent);cursor:pointer;font-size:11px">Load</button>
+      <button onclick="deletePlan('${k.replace(/'/g,"\\'")}');renderSlList();" style="padding:3px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text3);cursor:pointer;font-size:11px">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function saveNamedPlan(name){
+  if(!name.trim()){ alert('Enter a plan name.'); return; }
+  const plans=getPlans(); plans[name.trim()]=planData(); savePlans(plans);
+  markClean(); closeSlModal();
+}
+function loadPlan(name){
+  const plans=getPlans(); if(plans[name]) loadPlanData(plans[name]);
+}
+function deletePlan(name){
+  const plans=getPlans(); delete plans[name]; savePlans(plans);
+}
+
+document.getElementById('sl-close').addEventListener('click', closeSlModal);
+document.getElementById('sl-modal').addEventListener('click', e=>{ if(e.target===document.getElementById('sl-modal')) closeSlModal(); });
+document.getElementById('sl-save-new').addEventListener('click',()=>saveNamedPlan(document.getElementById('sl-name').value));
+document.getElementById('sl-name').addEventListener('keydown',e=>{ if(e.key==='Enter') saveNamedPlan(document.getElementById('sl-name').value); });
+
+document.getElementById('sl-export').addEventListener('click',()=>{
+  dl(new Blob([JSON.stringify(planData(),null,2)],{type:'application/json'}),'floorplan.json');
 });
+document.getElementById('sl-import').addEventListener('click',()=>document.getElementById('file-input').click());
+
+document.getElementById('btn-save').addEventListener('click', openSlModal);
+document.getElementById('btn-load').addEventListener('click', openSlModal);
+document.getElementById('file-input').addEventListener('change',e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{ loadPlanData(JSON.parse(ev.target.result)); }
+    catch{ alert('Could not load file.'); }
+  };
+  reader.readAsText(file); e.target.value='';
+});
+
+// Auto-load last session on startup
+(()=>{
+  try{
+    const auto=localStorage.getItem(LS_AUTO);
+    if(auto){ loadPlanData(JSON.parse(auto)); markClean(); }
+  }catch(e){}
+})();
 document.getElementById('btn-export-png').addEventListener('click',()=>{
   const off=document.createElement('canvas');off.width=canvas2d.width;off.height=canvas2d.height;
   const oc=off.getContext('2d');oc.fillStyle='#ffffff';oc.fillRect(0,0,off.width,off.height);oc.drawImage(canvas2d,0,0);
@@ -2692,6 +2892,24 @@ setTimeout(fitView, 50);
       <button class="tool-tile" data-tool="tree"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="5"/><line x1="9" y1="13" x2="9" y2="17"/></svg>Tree</button>
       <button class="tool-tile" data-tool="shrub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="9" cy="10" rx="6" ry="5"/><ellipse cx="6" cy="8" rx="4" ry="4"/></svg>Shrub</button>
       <button class="tool-tile" data-tool="garden-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="8" width="14" height="6" rx="1"/><line x1="5" y1="5" x2="5" y2="8"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="13" y1="5" x2="13" y2="8"/></svg>Garden bed</button>
+    </div>
+  </div>
+</div>
+<!-- Save/Load modal -->
+<div id="sl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;align-items:center;justify-content:center">
+  <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:20px;min-width:340px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,0.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span style="font-size:14px;font-weight:600;color:var(--text)">Plans</span>
+      <button id="sl-close" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;line-height:1">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="sl-name" type="text" placeholder="Plan name…" style="flex:1;padding:6px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:12px">
+      <button id="sl-save-new" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:500">Save</button>
+    </div>
+    <div id="sl-list" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto"></div>
+    <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;gap:8px">
+      <button id="sl-import" style="flex:1;padding:6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text2);cursor:pointer;font-size:11px">Import .json</button>
+      <button id="sl-export" style="flex:1;padding:6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text2);cursor:pointer;font-size:11px">Export .json</button>
     </div>
   </div>
 </div>
