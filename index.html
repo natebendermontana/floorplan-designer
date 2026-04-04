@@ -182,14 +182,15 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
         <label>Wall ht</label>
         <input type="number" id="wall-height-input" value="9" min="6" max="20" step="0.5" style="width:44px">
         <span style="width:0.5px;height:14px;background:rgba(255,255,255,0.15);margin:0 2px;flex-shrink:0"></span>
-        <label>Slope</label>
-        <input type="number" id="slope-angle-input" value="0" min="0" max="30" step="1" style="width:40px" title="Slope angle in degrees">
-        <span style="font-size:10px;color:rgba(255,255,255,0.3)">°</span>
-        <select id="slope-dir-input" style="padding:3px 4px;border:0.5px solid rgba(255,255,255,0.18);border-radius:5px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);font-size:10px;width:46px">
-          <option value="N">N↑</option>
-          <option value="S">S↓</option>
-          <option value="E" selected>E→</option>
-          <option value="W">W←</option>
+        <label style="white-space:nowrap">Lo (ft)</label>
+        <input type="number" id="slope-low-input"  value="0"  min="-50" max="200" step="0.5" style="width:44px" title="Terrain height at low side (ft)">
+        <label style="white-space:nowrap">Hi (ft)</label>
+        <input type="number" id="slope-high-input" value="0"  min="-50" max="200" step="0.5" style="width:44px" title="Terrain height at high side (ft)">
+        <select id="slope-dir-input" style="padding:3px 4px;border:0.5px solid rgba(255,255,255,0.18);border-radius:5px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);font-size:10px;width:52px" title="Which edge is the high side">
+          <option value="N">Hi=N</option>
+          <option value="S">Hi=S</option>
+          <option value="E" selected>Hi=E</option>
+          <option value="W">Hi=W</option>
         </select>
       </div>
     </div>
@@ -1566,7 +1567,8 @@ document.addEventListener('keydown',e=>{
   });
 })();
 document.getElementById('wall-height-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
-document.getElementById('slope-angle-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
+document.getElementById('slope-low-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
+document.getElementById('slope-high-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
 document.getElementById('slope-dir-input').addEventListener('change',()=>{if(panel3dOpen)rebuild3d();});
 
 function initThree(){
@@ -1644,20 +1646,41 @@ function rebuild3d(){
   const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
   const FLOOR_SEP=0.4; // thickness of floor slab between levels
 
-  // Terrain slope
-  const slopeDeg=parseFloat(document.getElementById('slope-angle-input').value)||0;
-  const slopeDir=document.getElementById('slope-dir-input').value||'E';
-  const slopeRad=slopeDeg*Math.PI/180;
-  // slopeOffset(x3, z3): extra Y to add for an element at 3D position (x3, z3)
-  // positive slope means ground rises in the chosen compass direction
+  // Terrain: linear slope from Lo height to Hi height across the lot.
+  // slopeDir tells us which edge is the HIGH side.
+  const slopeLo  = parseFloat(document.getElementById('slope-low-input').value)  || 0;
+  const slopeHi  = parseFloat(document.getElementById('slope-high-input').value) || 0;
+  const slopeDir = document.getElementById('slope-dir-input').value || 'E';
+
+  // Lot extents in scene coords (scene is centred on element bounding box)
+  // These are computed later, but we need them for slopeOffset.
+  // We'll use the lot inputs directly and lazy-compute cx/cz here too.
+  const _lotW=parseFloat(document.getElementById('lot-w').value)||100;
+  const _lotH=parseFloat(document.getElementById('lot-h').value)||100;
+
+  // slopeOffset(x3, z3): returns the terrain Y at a scene-space position.
+  // Linearly interpolates Lo→Hi across the lot dimension for the chosen axis.
+  // The lot in scene space runs from (-cx) to (_lotW-cx) in X,
+  // and from (-cz) to (_lotH-cz) in Z. cx/cz are computed below — we use
+  // a closure so slopeOffset can be called after cx/cz are set.
+  let _cx=0, _cz=0; // will be set after bounding box is computed
   function slopeOffset(x3,z3){
-    if(slopeRad<0.001)return 0;
-    const t=Math.tan(slopeRad);
-    if(slopeDir==='E') return  x3*t;
-    if(slopeDir==='W') return -x3*t;
-    if(slopeDir==='S') return  z3*t;
-    if(slopeDir==='N') return -z3*t;
-    return 0;
+    if(slopeLo===slopeHi) return slopeLo; // flat
+    // Map position along the slope axis to a 0..1 fraction across the lot
+    let frac;
+    if(slopeDir==='E'||slopeDir==='W'){
+      // X axis: lot goes from -_cx to _lotW-_cx
+      const x0=-_cx, x1=_lotW-_cx;
+      frac=(x3-x0)/(x1-x0);
+      if(slopeDir==='W') frac=1-frac; // W = high on west (low x) side
+    } else {
+      // Z axis: lot goes from -_cz to _lotH-_cz
+      const z0=-_cz, z1=_lotH-_cz;
+      frac=(z3-z0)/(z1-z0);
+      if(slopeDir==='N') frac=1-frac; // N = high on north (low z) side
+    }
+    frac=Math.max(0,Math.min(1,frac)); // clamp outside lot
+    return slopeLo + (slopeHi-slopeLo)*frac;
   }
 
   // Centre scene on bounding box
@@ -1667,6 +1690,7 @@ function rebuild3d(){
     if(el.type==='wall'){minX=Math.min(minX,el.x1,el.x2);minZ=Math.min(minZ,el.y1,el.y2);maxX=Math.max(maxX,el.x1,el.x2);maxZ=Math.max(maxZ,el.y1,el.y2);}
   });
   const cx=isFinite(minX)?(minX+maxX)/2/PX_PER_FT:0, cz=isFinite(minZ)?(minZ+maxZ)/2/PX_PER_FT:0;
+  _cx=cx; _cz=cz; // make cx/cz available inside slopeOffset closure
 
   // Tag a mesh with its floor number and respect current visibility
   function addFP(obj, fl) {
