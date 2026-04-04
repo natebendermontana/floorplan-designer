@@ -514,6 +514,7 @@ function dimLabel(x1,y1,x2,y2,off=-9) {
 // orange tint when active on upper floor.
 function floorAlpha(el) {
   // Elements on a different floor are dimmed
+  if(el.type==='roof') return currentLayer==='roof' ? 1.0 : 0.6;
   return (el.floor||0) === currentFloor ? 1.0 : 0.28;
 }
 function floorStrokeColor(el, selColor, normalDark, normalLight) {
@@ -1069,17 +1070,24 @@ function render2d() {
   ctx.setTransform(viewZoom, 0, 0, viewZoom, viewOX, viewOY);
   drawPropertyBoundary();
   drawGrid();
-  // Draw other-floor elements first (dimmed), then current floor on top
-  const otherFloor = elements.filter(e=>(e.floor||0)!==currentFloor);
-  const thisFloor  = elements.filter(e=>(e.floor||0)===currentFloor);
+  // Draw layers: hidden layers skipped, other floors dimmed, current floor full
+  // Roofs drawn on top regardless of active layer
+  const roofs    = elements.filter(e => e.type==='roof');
+  const nonRoofs = elements.filter(e => e.type!=='roof');
+  const otherFloor = nonRoofs.filter(e => layerVisible[(e.floor||0)] && (e.floor||0)!==currentFloor);
+  const thisFloor  = nonRoofs.filter(e => layerVisible[(e.floor||0)] && (e.floor||0)===currentFloor);
   for (const el of [...otherFloor, ...thisFloor]) {
     const isSel=(el===selected)||multiSel.includes(el);
     if      (el.type==='wall')      drawWall(el,isSel);
     else if (el.type==='room')      drawRoom(el,isSel);
-    else if (el.type==='roof')      drawRoof(el,isSel);
     else if (el.type==='window')    drawWindow(el,isSel);
     else if (el.type==='door')      drawDoor(el,isSel);
     else if (el.type==='furniture') drawFurniture(el,isSel);
+  }
+  if (layerVisible.roof) {
+    for (const el of roofs) {
+      drawRoof(el, (el===selected)||multiSel.includes(el));
+    }
   }
   if (drawing && previewStart && previewEnd) {
     ctx.globalAlpha=0.5;
@@ -1436,7 +1444,7 @@ canvas2d.addEventListener('mouseup',e=>{
     if(rw>SNAP()&&rh>SNAP()){
       const rtype=tool.replace('roof-','');
       const newRoof={type:'roof',rtype,x:Math.min(previewStart.x,sp.x),y:Math.min(previewStart.y,sp.y),
-        w:rw,h:rh,pitch:6,ridgeDir:'EW',overhang:1,floor:currentFloor};
+        w:rw,h:rh,pitch:6,ridgeDir:'EW',overhang:1,floor:'roof'};
       saveHistory();elements.push(newRoof);switchToSelect(newRoof);
     }
   }
@@ -2034,27 +2042,26 @@ function updateCam3(){
 }
 
 // ── Floor visibility ──────────────────────────────────────────
-const floorVisible = {0: true, 1: true};
+// layerVisible defined above in the unified layer system
+const floorVisible = layerVisible; // alias for backward compat
 
 function applyFloorVisibility() {
   if (!scene3) return;
   scene3.children.forEach(c => {
-    if (c.userData.fp && c.userData.floorNum !== undefined)
-      c.visible = !!floorVisible[c.userData.floorNum];
+    if (!c.userData.fp) return;
+    if (c.userData.isRoof) { c.visible = !!layerVisible.roof; return; }
+    if (c.userData.floorNum !== undefined)
+      c.visible = !!layerVisible[c.userData.floorNum];
   });
 }
 
+// 3D panel G/U/R buttons — toggle layerVisible and sync with 2D
 ['0','1'].forEach(f => {
   const btn = document.getElementById('vis-fl-' + f);
   if (!btn) return;
-  btn.addEventListener('click', () => {
-    const fl = +f;
-    floorVisible[fl] = !floorVisible[fl];
-    btn.style.opacity     = floorVisible[fl] ? '1' : '0.35';
-    btn.style.background  = floorVisible[fl] ? 'rgba(255,255,255,0.15)' : 'transparent';
-    applyFloorVisibility();
-  });
+  btn.addEventListener('click', () => toggleLayerVisible(+f));
 });
+document.getElementById('vis-roof').addEventListener('click', () => toggleLayerVisible('roof'));
 
 function rebuild3d(){
   if(!scene3)return;
