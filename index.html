@@ -121,8 +121,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 <div id="topbar">
   <h1 title="Floorplan Designer">FP</h1>
   <div class="tb-sep"></div>
-  <button class="floor-btn active" data-floor="0" title="Ground floor">G</button>
-  <button class="floor-btn" data-floor="1" title="Upper floor">U</button>
+  <button class="layer-btn active" data-layer="0" title="Ground floor · Ctrl+click to toggle visibility">G</button>
+  <button class="layer-btn" data-layer="1" title="Upper floor · Ctrl+click to toggle visibility">U</button>
+  <button class="layer-btn" data-layer="roof" title="Roof · Ctrl+click to toggle visibility">R</button>
   <div class="tb-sep"></div>
   <button class="dd-btn" id="dd-draw-btn" title="Draw tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14l1.5-4L11 2.5l2.5 2.5-7.5 7.5L2 14z"/></svg>Draw ▾</button>
   <button class="dd-btn" id="dd-open-btn" title="Doors &amp; Windows"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="13"/><path d="M3 1 A6 6 0 0 1 9 7"/></svg>Open ▾</button>
@@ -236,10 +237,50 @@ let panStart = null;
 let panOriginX = 0, panOriginY = 0;
 
 let elements = [], history = [];
+
+// ── Layer / visibility system (shared 2D + 3D) ─────────────────────────────
+let currentLayer  = 0;          // active drawing layer: 0, 1, or 'roof'
+let currentFloor  = 0;          // floor for non-roof placement (0 or 1)
+const layerVisible = {0:true, 1:true, roof:true};
+
+function setLayer(layer) {
+  currentLayer = layer;
+  currentFloor = (layer === 'roof') ? 0 : +layer;
+  // Sync 2D layer buttons
+  document.querySelectorAll('.layer-btn').forEach(b => {
+    const bl = (b.dataset.layer === 'roof') ? 'roof' : +b.dataset.layer;
+    b.classList.toggle('active',  bl === layer);
+    b.classList.toggle('dimmed', !layerVisible[bl]);
+  });
+  // Sync 3D panel buttons
+  syncVis3dBtns();
+  selected = null; multiSel = []; updateProps(); render2d();
+}
+
+function toggleLayerVisible(layer) {
+  layerVisible[layer] = !layerVisible[layer];
+  // Dim/un-dim 2D buttons
+  document.querySelectorAll('.layer-btn').forEach(b => {
+    const bl = (b.dataset.layer === 'roof') ? 'roof' : +b.dataset.layer;
+    b.classList.toggle('dimmed', !layerVisible[bl]);
+  });
+  syncVis3dBtns();
+  if (typeof applyFloorVisibility === 'function') applyFloorVisibility();
+  render2d();
+}
+
+function syncVis3dBtns() {
+  [{id:'vis-fl-0',key:0},{id:'vis-fl-1',key:1},{id:'vis-roof',key:'roof'}].forEach(({id,key})=>{
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.style.opacity    = layerVisible[key] ? '1' : '0.35';
+    b.style.background = layerVisible[key] ? 'rgba(255,255,255,0.15)' : 'transparent';
+  });
+}
 let selected = null;
 let multiSel = [];
 let tool = 'select';
-let currentFloor = 0;            // 0 = ground, 1 = upper
+// currentFloor declared in layer system above
 let drawing = false, previewStart = null, previewEnd = null;
 let dragEl = null, dragStart = null;
 let activeSnapHint = null; // {x,y} canvas px — drawn as indicator during drag
@@ -363,12 +404,15 @@ function saveHistory() {
 // FLOOR SWITCHER
 // ══════════════════════════════════════════════════
 const FLOOR_NAMES = ['Ground floor', 'Upper floor'];
-document.querySelectorAll('.floor-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    currentFloor = parseInt(btn.dataset.floor);
-    document.querySelectorAll('.floor-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    selected = null; multiSel = []; updateProps(); render2d();
+// Layer buttons (2D topbar G / U / R)
+// Single-click = switch active layer; Ctrl+click or double-click = toggle visibility
+document.querySelectorAll('.layer-btn').forEach(btn => {
+  let _t = null;
+  btn.addEventListener('click', e => {
+    const layer = (btn.dataset.layer === 'roof') ? 'roof' : +btn.dataset.layer;
+    if (e.ctrlKey || e.metaKey) { toggleLayerVisible(layer); return; }
+    if (_t) { clearTimeout(_t); _t = null; toggleLayerVisible(layer); return; }
+    _t = setTimeout(() => { _t = null; setLayer(layer); }, 200);
   });
 });
 
@@ -2041,10 +2085,7 @@ function updateCam3(){
   camera3.lookAt(spherical.tx, spherical.ty, spherical.tz);
 }
 
-// ── Floor visibility ──────────────────────────────────────────
-// layerVisible defined above in the unified layer system
-const floorVisible = layerVisible; // alias for backward compat
-
+// ── Floor / layer visibility ─────────────────────────────────
 function applyFloorVisibility() {
   if (!scene3) return;
   scene3.children.forEach(c => {
@@ -2055,12 +2096,9 @@ function applyFloorVisibility() {
   });
 }
 
-// 3D panel G/U/R buttons — toggle layerVisible and sync with 2D
-['0','1'].forEach(f => {
-  const btn = document.getElementById('vis-fl-' + f);
-  if (!btn) return;
-  btn.addEventListener('click', () => toggleLayerVisible(+f));
-});
+// 3D panel buttons wire up after DOM ready (they exist in HTML above script)
+document.getElementById('vis-fl-0').addEventListener('click', () => toggleLayerVisible(0));
+document.getElementById('vis-fl-1').addEventListener('click', () => toggleLayerVisible(1));
 document.getElementById('vis-roof').addEventListener('click', () => toggleLayerVisible('roof'));
 
 function rebuild3d(){
