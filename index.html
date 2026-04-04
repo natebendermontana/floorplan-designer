@@ -1038,7 +1038,12 @@ function render2d() {
       ctx.strokeStyle=dark?'#d8d7ce':'#2C2C2A'; ctx.lineWidth=8;
       const rx=Math.min(ps.x,pe.x),ry=Math.min(ps.y,pe.y),rw=Math.abs(pe.x-ps.x),rh=Math.abs(pe.y-ps.y);
       ctx.strokeRect(rx,ry,rw,rh);
-      document.getElementById('st-dim').textContent=`${(rw/PX_PER_FT).toFixed(1)} \u00d7 ${(rh/PX_PER_FT).toFixed(1)} ft`;
+      document.getElementById('st-dim').textContent=`${(rw/PX_PER_FT).toFixed(1)} × ${(rh/PX_PER_FT).toFixed(1)} ft`;
+    } else if(tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'){
+      ctx.strokeStyle='#7C3AED'; ctx.lineWidth=2; ctx.setLineDash([6,3]);
+      const rx=Math.min(ps.x,pe.x),ry=Math.min(ps.y,pe.y),rw=Math.abs(pe.x-ps.x),rh=Math.abs(pe.y-ps.y);
+      ctx.strokeRect(rx,ry,rw,rh); ctx.setLineDash([]);
+      document.getElementById('st-dim').textContent=`${(rw/PX_PER_FT).toFixed(1)} × ${(rh/PX_PER_FT).toFixed(1)} ft`;
     }
     ctx.globalAlpha=1;
   }
@@ -1322,7 +1327,7 @@ canvas2d.addEventListener('mousedown',e=>{
   if(e.button===1||(e.button===0&&spaceDown))return; // handled by pan
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='rect-select'){rectSelActive=true;rectSelStart={x,y};rectSelEnd={x,y};return;}
-  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
+  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
   const DOOR_TOOLS  =['door','double-door','sliding-door','pocket-door'];
   const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
   if(DOOR_TOOLS.includes(tool)){
@@ -1370,6 +1375,14 @@ canvas2d.addEventListener('mouseup',e=>{
     if(rw>SNAP()&&rh>SNAP()){
       const newRoom={type:'room',x:Math.min(previewStart.x,sp.x),y:Math.min(previewStart.y,sp.y),w:rw,h:rh,label:'',floor:currentFloor};
       saveHistory();elements.push(newRoom);switchToSelect(newRoom);
+    }
+  } else if(tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'){
+    const rw=Math.abs(sp.x-previewStart.x),rh=Math.abs(sp.y-previewStart.y);
+    if(rw>SNAP()&&rh>SNAP()){
+      const rtype=tool.replace('roof-','');
+      const newRoof={type:'roof',rtype,x:Math.min(previewStart.x,sp.x),y:Math.min(previewStart.y,sp.y),
+        w:rw,h:rh,pitch:6,ridgeDir:'EW',overhang:1,floor:currentFloor};
+      saveHistory();elements.push(newRoof);switchToSelect(newRoof);
     }
   }
   drawing=false;previewStart=null;previewEnd=null;
@@ -2137,6 +2150,13 @@ function rebuild3d(){
       if(room) yBase=roomElev(room);
       else if(el.fixedElev) yBase=0;          // user pinned to floor level
       else yBase=slopeOffset(ex3,ez3);        // default: follows terrain
+    } else if(el.type==='roof'){
+      // Roof sits at the wall-top of whatever floor it's on
+      const room=containingRoom(el.x+el.w/2, el.y+el.h/2, fl);
+      yBase = room ? roomElev(room) : (fl===1 ? (()=>{
+        const below=bestGroundRoomBelow(el.x,el.y,el.w,el.h);
+        return below ? groundRoomElev(below)+wallH+FLOOR_SEP : 0;
+      })() : 0);
     } else {
       yBase=slopeOffset(ex3,ez3);
     }
