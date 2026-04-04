@@ -127,6 +127,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="dd-btn" id="dd-draw-btn" title="Draw tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14l1.5-4L11 2.5l2.5 2.5-7.5 7.5L2 14z"/></svg>Draw ▾</button>
   <button class="dd-btn" id="dd-open-btn" title="Doors &amp; Windows"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="13"/><path d="M3 1 A6 6 0 0 1 9 7"/></svg>Open ▾</button>
   <button class="dd-btn" id="dd-furn-btn" title="Furniture"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="6" width="14" height="6"/><rect x="1" y="4" width="3" height="8"/><rect x="12" y="4" width="3" height="8"/></svg>Furn ▾</button>
+  <button class="dd-btn" id="dd-roof-btn" title="Roof tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 10 L8 2 L15 10"/><path d="M3 10 L3 14 L13 14 L13 10"/></svg>Roof ▾</button>
   <button class="dd-btn" id="dd-out-btn" title="Outdoor"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="4"/><line x1="8" y1="10" x2="8" y2="15"/><line x1="4" y1="15" x2="12" y2="15"/></svg>Out ▾</button>
   <div class="tb-sep"></div>
   <button class="tb-icon" id="btn-undo" title="Undo (⌘Z)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1 1 1.5 4"/><path d="M2 4v4h4"/></svg></button>
@@ -297,7 +298,7 @@ function geometricSnap(cx, cy, movingEl) {
   const candidates = [];
   elements.forEach(el => {
     if(el === movingEl) return;
-    if(el.type === 'room'){
+    if(el.type === 'room' || el.type === 'roof'){
       // 4 edges: north, south, west, east
       candidates.push({x: el.x,       y: null,  axis:'x'}); // west edge
       candidates.push({x: el.x+el.w,  y: null,  axis:'x'}); // east edge
@@ -419,7 +420,7 @@ function hitHandle(el, mx, my) {
 // ══════════════════════════════════════════════════
 function applyResize(el, role, mx, my, origin, mouseStart) {
   const dx=mx-mouseStart.x, dy=my-mouseStart.y;
-  if (el.type==='room') {
+  if (el.type==='room'||el.type==='roof') {
     let {x,y,w,h}=origin;
     if(role==='nw'||role==='w'||role==='sw'){const nx=snap(origin.x+dx);w=Math.max(SNAP(),snap(origin.w-(nx-origin.x)));x=origin.x+origin.w-w;}
     if(role==='ne'||role==='e'||role==='se'){w=Math.max(SNAP(),snap(origin.w+dx));}
@@ -1075,10 +1076,126 @@ function hitTest(x,y) {
       if(!len)continue;
       const t=Math.max(0,Math.min(1,((x-el.x1)*dx+(y-el.y1)*dy)/(len*len)));
       if(Math.hypot(x-el.x1-t*dx,y-el.y1-t*dy)<12)return el;
-    } else if(el.type==='room'){
+    } else if(el.type==='room'||el.type==='roof'){
       if(x>=el.x&&x<=el.x+el.w&&y>=el.y&&y<=el.y+el.h)return el;
     } else if(el.type==='window'||el.type==='door'){
       if(Math.hypot(x-el.x,y-el.y)<35)return el;
+    } else if(el.type==='roof'){
+      const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
+      const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
+      const ov=el.overhang??1;          // overhang in scene feet
+      const pitch=el.pitch??6;          // rise per 12 run
+      const rtype=el.rtype||'gable';
+      const ridgeDir=el.ridgeDir||'EW';
+      // Roof sits on top of wallH for this floor
+      const roofBase=yBase+wallH;
+      const roofMat=new THREE.MeshLambertMaterial({color:0x8a7060,side:THREE.DoubleSide});
+      const ceilMat=new THREE.MeshLambertMaterial({color:0xd4cfc4,side:THREE.DoubleSide});
+      // Footprint with overhang
+      const x0=rx-ov, x1=rx+rw+ov, z0=rz-ov, z1=rz+rh+ov;
+      const fw3=x1-x0, fd3=z1-z0;
+
+      const addRoofFace=(verts,mat)=>{
+        // verts: array of {x,y,z} — build a flat polygon as BufferGeometry
+        const geo=new THREE.BufferGeometry();
+        // Triangulate as fan from first vertex
+        const positions=[];
+        for(let i=1;i<verts.length-1;i++){
+          positions.push(verts[0].x,verts[0].y,verts[0].z);
+          positions.push(verts[i].x,verts[i].y,verts[i].z);
+          positions.push(verts[i+1].x,verts[i+1].y,verts[i+1].z);
+        }
+        geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+        geo.computeVertexNormals();
+        const m=new THREE.Mesh(geo,mat);
+        m.castShadow=true; addFP(m,fl);
+      };
+
+      const riseEW=((fd3/2)*(pitch/12)); // rise from eave to ridge for E-W ridge
+      const riseNS=((fw3/2)*(pitch/12)); // rise from eave to ridge for N-S ridge
+
+      if(rtype==='flat'){
+        // Thin flat slab
+        const geo=new THREE.BoxGeometry(fw3,0.3,fd3);
+        const m=new THREE.Mesh(geo,roofMat);
+        m.position.set(x0+fw3/2, roofBase+0.15, z0+fd3/2);
+        m.castShadow=true; addFP(m,fl);
+
+      } else if(rtype==='shed'){
+        // Wedge: low at z0, high at z1
+        const rise=(fd3)*(pitch/12);
+        // 4 faces: bottom (ceiling), front (low), back (high), two sides, top
+        const yLo=roofBase, yHi=roofBase+rise;
+        addRoofFace([{x:x0,y:yLo,z:z0},{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x0,y:yHi,z:z1}], roofMat); // top surface
+        addRoofFace([{x:x0,y:yLo,z:z0},{x:x1,y:yLo,z:z0},{x:x1,y:yLo,z:z0}], ceilMat); // front (flat wall triangle at low end)
+        // Gable ends (triangles at sides)
+        addRoofFace([{x:x0,y:yLo,z:z0},{x:x0,y:yHi,z:z1},{x:x0,y:yLo,z:z1}], roofMat);
+        addRoofFace([{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x1,y:yLo,z:z1}], roofMat);
+        // Fascia boards (front low edge, back high edge)
+        const fas=new THREE.BoxGeometry(fw3,0.15,0.1);
+        const flo=new THREE.Mesh(fas,roofMat); flo.position.set(x0+fw3/2,yLo+0.075,z0); addFP(flo,fl);
+        const fhi=new THREE.Mesh(fas,roofMat); fhi.position.set(x0+fw3/2,yHi+0.075,z1); addFP(fhi,fl);
+
+      } else if(rtype==='gable'){
+        if(ridgeDir==='EW'){
+          // Ridge runs east-west at midpoint of depth (z)
+          const zMid=z0+fd3/2, yRidge=roofBase+riseEW;
+          // South slope: z0 → zMid
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:x1,y:yRidge,z:zMid},{x:x0,y:yRidge,z:zMid}], roofMat);
+          // North slope: zMid → z1
+          addRoofFace([{x:x0,y:yRidge,z:zMid},{x:x1,y:yRidge,z:zMid},{x:x1,y:roofBase,z:z1},{x:x0,y:roofBase,z:z1}], roofMat);
+          // Gable ends (triangles at east and west)
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:yRidge,z:zMid},{x:x0,y:roofBase,z:z1}], roofMat);
+          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:yRidge,z:zMid},{x:x1,y:roofBase,z:z1}], roofMat);
+          // Ridge board
+          const ridgeGeo=new THREE.BoxGeometry(fw3,0.15,0.1);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set(x0+fw3/2,yRidge+0.075,zMid); addFP(ridgeMesh,fl);
+        } else {
+          // Ridge runs north-south at midpoint of width (x)
+          const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:xMid,y:yRidge,z:z0},{x:xMid,y:yRidge,z:z1},{x:x0,y:roofBase,z:z1}], roofMat);
+          addRoofFace([{x:xMid,y:yRidge,z:z0},{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:xMid,y:yRidge,z:z0},{x:x1,y:roofBase,z:z0}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1},{x:x1,y:roofBase,z:z1}], roofMat);
+          const ridgeGeo=new THREE.BoxGeometry(0.1,0.15,fd3);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set(xMid,yRidge+0.075,z0+fd3/2); addFP(ridgeMesh,fl);
+        }
+
+      } else if(rtype==='hip'){
+        // Hip: all 4 sides slope inward to a central ridge
+        // Ridge is shorter than the building, runs along the longer axis
+        const useEW=fw3>=fd3; // ridge along longer dimension
+        if(useEW){
+          const zMid=z0+fd3/2, yRidge=roofBase+riseEW;
+          const ridgeHalf=(fw3-fd3)/2; // ridge starts/ends inset from corners
+          const xRidL=x0+ridgeHalf, xRidR=x1-ridgeHalf;
+          // South face (trapezoid)
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:xRidR,y:yRidge,z:zMid},{x:xRidL,y:yRidge,z:zMid}], roofMat);
+          // North face (trapezoid)
+          addRoofFace([{x:x0,y:roofBase,z:z1},{x:x1,y:roofBase,z:z1},{x:xRidR,y:yRidge,z:zMid},{x:xRidL,y:yRidge,z:zMid}], roofMat);
+          // West hip (triangle)
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:roofBase,z:z1},{x:xRidL,y:yRidge,z:zMid}], roofMat);
+          // East hip (triangle)
+          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xRidR,y:yRidge,z:zMid}], roofMat);
+          // Ridge board
+          const ridgeGeo=new THREE.BoxGeometry(xRidR-xRidL,0.12,0.1);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set((xRidL+xRidR)/2,yRidge+0.06,zMid); addFP(ridgeMesh,fl);
+        } else {
+          const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
+          const ridgeHalf=(fd3-fw3)/2;
+          const zRidT=z0+ridgeHalf, zRidB=z1-ridgeHalf;
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:xMid,y:yRidge,z:zRidT}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z1},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
+          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
+          const ridgeGeo=new THREE.BoxGeometry(0.1,0.12,zRidB-zRidT);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set(xMid,yRidge+0.06,(zRidT+zRidB)/2); addFP(ridgeMesh,fl);
+        }
+      }
     } else if(el.type==='furniture'){
       const ang=-(el.angle||0),pw=el.fw*PX_PER_FT/2,ph=el.fh*PX_PER_FT/2;
       const lx=(x-el.x)*Math.cos(ang)-(y-el.y)*Math.sin(ang);
@@ -1141,7 +1258,7 @@ canvas2d.addEventListener('mousemove',e=>{
         const p1=geometricSnap(snap(o.x1+dx), snap(o.y1+dy), el);
         const p2=geometricSnap(snap(o.x2+dx), snap(o.y2+dy), el);
         el.x1=p1.x; el.y1=p1.y; el.x2=p2.x; el.y2=p2.y;
-      } else if(el.type==='room'){
+      } else if(el.type==='room'||el.type==='roof'){
         const gs=geometricSnap(snap(o.x+dx), snap(o.y+dy), el);
         // Also try snapping right/bottom edge
         const gs2=geometricSnap(snap(o.x+o.w+dx), snap(o.y+o.h+dy), el);
@@ -1294,6 +1411,16 @@ function updateProps() {
   const sel2=(id,opts,cur)=>`<select class="prop-input" id="${id}">${opts.map(([v,l])=>`<option value="${v}"${v==cur?' selected':''}>${l}</option>`).join('')}</select>`;
   let html='';
   if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
+  else if(el.type==='roof'){
+    const rtypes=[['flat','Flat'],['shed','Shed'],['gable','Gable'],['hip','Hip']];
+    html+=row('Style',`<select class="prop-input" id="pe-rtype">${rtypes.map(([v,l])=>`<option value="${v}"${(el.rtype||'gable')===v?' selected':''}>${l}</option>`).join('')}</select>`);
+    html+=row('Pitch (x/12)',inp('pe-pitch','number',el.pitch??6,'min="0.5" max="24" step="0.5"'));
+    if(el.rtype==='gable'||el.rtype==='hip')
+      html+=row('Ridge',`<select class="prop-input" id="pe-ridgedir"><option value="EW"${(el.ridgeDir||'EW')==='EW'?' selected':''}>E↔W</option><option value="NS"${el.ridgeDir==='NS'?' selected':''}>N↕S</option></select>`);
+    html+=row('Overhang (ft)',inp('pe-overhang','number',el.overhang??1,'min="0" max="4" step="0.25"'));
+    html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(1)} ft`));
+    html+=row('Depth',val(`${(el.h/PX_PER_FT).toFixed(1)} ft`));
+  }
   else if(el.type==='room'){
     html+=row('Type',val('Room'));
     html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(2)} ft`));
@@ -1345,6 +1472,10 @@ function updateProps() {
   bind('pe-winh', e=>{const v=parseFloat(e.target.value); el.winH = isNaN(v)||v<=0 ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-sillh',e=>{const v=parseFloat(e.target.value); el.sillH= isNaN(v)||v<0  ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
+  bind('pe-rtype',e=>{el.rtype=e.target.value;updateProps();render2d();if(panel3dOpen)rebuild3d();});
+  bind('pe-pitch',e=>{el.pitch=parseFloat(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
+  bind('pe-ridgedir',e=>{el.ridgeDir=e.target.value;render2d();if(panel3dOpen)rebuild3d();});
+  bind('pe-overhang',e=>{el.overhang=parseFloat(e.target.value)??1;render2d();if(panel3dOpen)rebuild3d();});
   bind('pe-elevation',e=>{
     const v=parseFloat(e.target.value);
     el.elevation = isNaN(v) ? undefined : v;
@@ -1381,9 +1512,9 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={'roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
-const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-out-btn':'dd-out'};
+const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-roof-btn':'dd-roof','dd-out-btn':'dd-out'};
 
 function closeAllDropdowns(){
   Object.keys(DD_MAP).forEach(b=>{
@@ -2295,6 +2426,122 @@ function rebuild3d(){
       sill.position.set(wx3, yBase+sillH-0.03, wz3);
       sill.rotation.y=wAng; addFP(sill,fl);
 
+    } else if(el.type==='roof'){
+      const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
+      const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
+      const ov=el.overhang??1;          // overhang in scene feet
+      const pitch=el.pitch??6;          // rise per 12 run
+      const rtype=el.rtype||'gable';
+      const ridgeDir=el.ridgeDir||'EW';
+      // Roof sits on top of wallH for this floor
+      const roofBase=yBase+wallH;
+      const roofMat=new THREE.MeshLambertMaterial({color:0x8a7060,side:THREE.DoubleSide});
+      const ceilMat=new THREE.MeshLambertMaterial({color:0xd4cfc4,side:THREE.DoubleSide});
+      // Footprint with overhang
+      const x0=rx-ov, x1=rx+rw+ov, z0=rz-ov, z1=rz+rh+ov;
+      const fw3=x1-x0, fd3=z1-z0;
+
+      const addRoofFace=(verts,mat)=>{
+        // verts: array of {x,y,z} — build a flat polygon as BufferGeometry
+        const geo=new THREE.BufferGeometry();
+        // Triangulate as fan from first vertex
+        const positions=[];
+        for(let i=1;i<verts.length-1;i++){
+          positions.push(verts[0].x,verts[0].y,verts[0].z);
+          positions.push(verts[i].x,verts[i].y,verts[i].z);
+          positions.push(verts[i+1].x,verts[i+1].y,verts[i+1].z);
+        }
+        geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+        geo.computeVertexNormals();
+        const m=new THREE.Mesh(geo,mat);
+        m.castShadow=true; addFP(m,fl);
+      };
+
+      const riseEW=((fd3/2)*(pitch/12)); // rise from eave to ridge for E-W ridge
+      const riseNS=((fw3/2)*(pitch/12)); // rise from eave to ridge for N-S ridge
+
+      if(rtype==='flat'){
+        // Thin flat slab
+        const geo=new THREE.BoxGeometry(fw3,0.3,fd3);
+        const m=new THREE.Mesh(geo,roofMat);
+        m.position.set(x0+fw3/2, roofBase+0.15, z0+fd3/2);
+        m.castShadow=true; addFP(m,fl);
+
+      } else if(rtype==='shed'){
+        // Wedge: low at z0, high at z1
+        const rise=(fd3)*(pitch/12);
+        // 4 faces: bottom (ceiling), front (low), back (high), two sides, top
+        const yLo=roofBase, yHi=roofBase+rise;
+        addRoofFace([{x:x0,y:yLo,z:z0},{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x0,y:yHi,z:z1}], roofMat); // top surface
+        addRoofFace([{x:x0,y:yLo,z:z0},{x:x1,y:yLo,z:z0},{x:x1,y:yLo,z:z0}], ceilMat); // front (flat wall triangle at low end)
+        // Gable ends (triangles at sides)
+        addRoofFace([{x:x0,y:yLo,z:z0},{x:x0,y:yHi,z:z1},{x:x0,y:yLo,z:z1}], roofMat);
+        addRoofFace([{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x1,y:yLo,z:z1}], roofMat);
+        // Fascia boards (front low edge, back high edge)
+        const fas=new THREE.BoxGeometry(fw3,0.15,0.1);
+        const flo=new THREE.Mesh(fas,roofMat); flo.position.set(x0+fw3/2,yLo+0.075,z0); addFP(flo,fl);
+        const fhi=new THREE.Mesh(fas,roofMat); fhi.position.set(x0+fw3/2,yHi+0.075,z1); addFP(fhi,fl);
+
+      } else if(rtype==='gable'){
+        if(ridgeDir==='EW'){
+          // Ridge runs east-west at midpoint of depth (z)
+          const zMid=z0+fd3/2, yRidge=roofBase+riseEW;
+          // South slope: z0 → zMid
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:x1,y:yRidge,z:zMid},{x:x0,y:yRidge,z:zMid}], roofMat);
+          // North slope: zMid → z1
+          addRoofFace([{x:x0,y:yRidge,z:zMid},{x:x1,y:yRidge,z:zMid},{x:x1,y:roofBase,z:z1},{x:x0,y:roofBase,z:z1}], roofMat);
+          // Gable ends (triangles at east and west)
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:yRidge,z:zMid},{x:x0,y:roofBase,z:z1}], roofMat);
+          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:yRidge,z:zMid},{x:x1,y:roofBase,z:z1}], roofMat);
+          // Ridge board
+          const ridgeGeo=new THREE.BoxGeometry(fw3,0.15,0.1);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set(x0+fw3/2,yRidge+0.075,zMid); addFP(ridgeMesh,fl);
+        } else {
+          // Ridge runs north-south at midpoint of width (x)
+          const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:xMid,y:yRidge,z:z0},{x:xMid,y:yRidge,z:z1},{x:x0,y:roofBase,z:z1}], roofMat);
+          addRoofFace([{x:xMid,y:yRidge,z:z0},{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:xMid,y:yRidge,z:z0},{x:x1,y:roofBase,z:z0}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1},{x:x1,y:roofBase,z:z1}], roofMat);
+          const ridgeGeo=new THREE.BoxGeometry(0.1,0.15,fd3);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set(xMid,yRidge+0.075,z0+fd3/2); addFP(ridgeMesh,fl);
+        }
+
+      } else if(rtype==='hip'){
+        // Hip: all 4 sides slope inward to a central ridge
+        // Ridge is shorter than the building, runs along the longer axis
+        const useEW=fw3>=fd3; // ridge along longer dimension
+        if(useEW){
+          const zMid=z0+fd3/2, yRidge=roofBase+riseEW;
+          const ridgeHalf=(fw3-fd3)/2; // ridge starts/ends inset from corners
+          const xRidL=x0+ridgeHalf, xRidR=x1-ridgeHalf;
+          // South face (trapezoid)
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:xRidR,y:yRidge,z:zMid},{x:xRidL,y:yRidge,z:zMid}], roofMat);
+          // North face (trapezoid)
+          addRoofFace([{x:x0,y:roofBase,z:z1},{x:x1,y:roofBase,z:z1},{x:xRidR,y:yRidge,z:zMid},{x:xRidL,y:yRidge,z:zMid}], roofMat);
+          // West hip (triangle)
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:roofBase,z:z1},{x:xRidL,y:yRidge,z:zMid}], roofMat);
+          // East hip (triangle)
+          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xRidR,y:yRidge,z:zMid}], roofMat);
+          // Ridge board
+          const ridgeGeo=new THREE.BoxGeometry(xRidR-xRidL,0.12,0.1);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set((xRidL+xRidR)/2,yRidge+0.06,zMid); addFP(ridgeMesh,fl);
+        } else {
+          const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
+          const ridgeHalf=(fd3-fw3)/2;
+          const zRidT=z0+ridgeHalf, zRidB=z1-ridgeHalf;
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:xMid,y:yRidge,z:zRidT}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z1},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB}], roofMat);
+          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
+          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
+          const ridgeGeo=new THREE.BoxGeometry(0.1,0.12,zRidB-zRidT);
+          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
+          ridgeMesh.position.set(xMid,yRidge+0.06,(zRidT+zRidB)/2); addFP(ridgeMesh,fl);
+        }
+      }
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
       const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
@@ -2880,6 +3127,19 @@ setTimeout(fitView, 50);
       <button class="tool-tile" data-tool="shower"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><circle cx="9" cy="8" r="2"/></svg>Shower</button>
       <button class="tool-tile" data-tool="sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="12" height="9" rx="1"/><ellipse cx="9" cy="10" rx="4" ry="3"/></svg>Sink</button>
       <button class="tool-tile" data-tool="double-sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="16" height="9" rx="1"/><ellipse cx="5" cy="10" rx="3" ry="2.5"/><ellipse cx="13" cy="10" rx="3" ry="2.5"/></svg>Dbl sink</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROOF dropdown -->
+<div class="dd-panel" id="dd-roof">
+  <div class="dd-section">
+    <div class="dd-label">Roof styles</div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="roof-flat"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="6"/><line x1="2" y1="6" x2="16" y2="6"/></svg>Flat</button>
+      <button class="tool-tile" data-tool="roof-shed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12 L16 6 L16 12 Z"/><line x1="2" y1="12" x2="16" y2="12"/></svg>Shed</button>
+      <button class="tool-tile" data-tool="roof-gable"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12 L9 4 L16 12 Z"/><line x1="2" y1="12" x2="16" y2="12"/><line x1="9" y1="4" x2="9" y2="12" stroke-dasharray="2 2"/></svg>Gable</button>
+      <button class="tool-tile" data-tool="roof-hip"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="9,3 16,9 9,15 2,9"/><line x1="6" y1="6" x2="12" y2="12" stroke-dasharray="2 2"/><line x1="12" y1="6" x2="6" y2="12" stroke-dasharray="2 2"/></svg>Hip</button>
     </div>
   </div>
 </div>
