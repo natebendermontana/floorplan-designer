@@ -2486,14 +2486,13 @@ function rebuild3d(){
   const lotW3=parseFloat(document.getElementById('lot-w').value)||100;
   const lotH3=parseFloat(document.getElementById('lot-h').value)||100;
 
-  // Lot in scene coords: lot origin is (0,0) canvas = (-cx,-cz) scene
-  // Extend terrain well beyond the lot on all sides so it fills the viewport
-  const MARGIN=80; // ft beyond lot edges
-  const lotX1=-cx-MARGIN, lotX2=lotW3-cx+MARGIN;
-  const lotZ1=-cz-MARGIN, lotZ2=lotH3-cz+MARGIN;
-  const lotSW=lotX2-lotX1, lotSD=lotZ2-lotZ1;
+  // Terrain covers exactly the lot boundary — no margin.
+  // The 3D render is clipped to the lot extent.
+  const lotX1=-cx, lotX2=lotW3-cx;
+  const lotZ1=-cz, lotZ2=lotH3-cz;
+  const lotSW=lotW3, lotSD=lotH3; // lot dimensions in ft = scene units
 
-  // 2 segments per foot so flat zones have sub-foot precision (capped at 500)
+  // 2 segments per foot for flat-zone precision (capped at 500)
   const segsX=Math.min(Math.round(lotSW*2), 500);
   const segsZ=Math.min(Math.round(lotSD*2), 500);
 
@@ -2540,10 +2539,27 @@ function rebuild3d(){
   grass.receiveShadow=true; grass.userData.fp=true; scene3.add(grass);
 
   // Dirt fill box beneath the terrain — no slope needed, just fill the gap
+  // Dirt fill box — exactly lot size, fills below terrain surface
   const dirtMat=new THREE.MeshLambertMaterial({color:0x5a4030});
-  const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW+20, 30, lotSD+20), dirtMat);
+  const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW, 30, lotSD), dirtMat);
   dirt.position.set((lotX1+lotX2)/2, -15, (lotZ1+lotZ2)/2);
   dirt.userData.fp=true; scene3.add(dirt);
+
+  // Lot boundary edge — thin dark curb at the perimeter to give a clean termination
+  const edgeMat=new THREE.MeshLambertMaterial({color:0x222222});
+  const edgeH=0.15, edgeT=0.15;
+  const lotCX=(lotX1+lotX2)/2, lotCZ=(lotZ1+lotZ2)/2;
+  // N edge (z=lotZ1), S edge (z=lotZ2), W edge (x=lotX1), E edge (x=lotX2)
+  [
+    {w:lotSW+edgeT*2, d:edgeT, x:lotCX,  z:lotZ1-edgeT/2},
+    {w:lotSW+edgeT*2, d:edgeT, x:lotCX,  z:lotZ2+edgeT/2},
+    {w:edgeT, d:lotSD,         x:lotX1-edgeT/2, z:lotCZ},
+    {w:edgeT, d:lotSD,         x:lotX2+edgeT/2, z:lotCZ},
+  ].forEach(({w,d,x,z})=>{
+    const em=new THREE.Mesh(new THREE.BoxGeometry(w,edgeH,d),edgeMat);
+    em.position.set(x,-edgeH/2,z);
+    em.userData.fp=true; scene3.add(em);
+  });
   applyFloorVisibility();
 }
 
