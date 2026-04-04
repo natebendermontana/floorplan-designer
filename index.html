@@ -100,6 +100,24 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 </style>
 </head>
 <body>
+<!-- Save/Load modal — placed at top of body so it exists when script runs -->
+<div id="sl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;align-items:center;justify-content:center">
+  <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:20px;min-width:340px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,0.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <span style="font-size:14px;font-weight:600;color:var(--text)">Plans</span>
+      <button id="sl-close" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;line-height:1">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="sl-name" type="text" placeholder="Plan name…" style="flex:1;padding:6px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:12px">
+      <button id="sl-save-new" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:500">Save</button>
+    </div>
+    <div id="sl-list" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto"></div>
+    <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;gap:8px">
+      <button id="sl-import" style="flex:1;padding:6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text2);cursor:pointer;font-size:11px">Import .json</button>
+      <button id="sl-export" style="flex:1;padding:6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text2);cursor:pointer;font-size:11px">Export .json</button>
+    </div>
+  </div>
+</div>
 <div id="topbar">
   <h1 title="Floorplan Designer">FP</h1>
   <div class="tb-sep"></div>
@@ -2892,24 +2910,6 @@ setTimeout(fitView, 50);
       <button class="tool-tile" data-tool="tree"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="5"/><line x1="9" y1="13" x2="9" y2="17"/></svg>Tree</button>
       <button class="tool-tile" data-tool="shrub"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="9" cy="10" rx="6" ry="5"/><ellipse cx="6" cy="8" rx="4" ry="4"/></svg>Shrub</button>
       <button class="tool-tile" data-tool="garden-bed"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="8" width="14" height="6" rx="1"/><line x1="5" y1="5" x2="5" y2="8"/><line x1="9" y1="4" x2="9" y2="8"/><line x1="13" y1="5" x2="13" y2="8"/></svg>Garden bed</button>
-    </div>
-  </div>
-</div>
-<!-- Save/Load modal -->
-<div id="sl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;align-items:center;justify-content:center">
-  <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:20px;min-width:340px;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,0.4)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <span style="font-size:14px;font-weight:600;color:var(--text)">Plans</span>
-      <button id="sl-close" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;line-height:1">✕</button>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <input id="sl-name" type="text" placeholder="Plan name…" style="flex:1;padding:6px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:12px">
-      <button id="sl-save-new" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:500">Save</button>
-    </div>
-    <div id="sl-list" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto"></div>
-    <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;gap:8px">
-      <button id="sl-import" style="flex:1;padding:6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text2);cursor:pointer;font-size:11px">Import .json</button>
-      <button id="sl-export" style="flex:1;padding:6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:transparent;color:var(--text2);cursor:pointer;font-size:11px">Export .json</button>
     </div>
   </div>
 </div>
