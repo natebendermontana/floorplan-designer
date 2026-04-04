@@ -2463,13 +2463,15 @@ function rebuild3d(){
   const lotH3=parseFloat(document.getElementById('lot-h').value)||100;
 
   // Lot in scene coords: lot origin is (0,0) canvas = (-cx,-cz) scene
-  const lotX1=-cx, lotX2=lotW3-cx;
-  const lotZ1=-cz, lotZ2=lotH3-cz;
+  // Extend terrain well beyond the lot on all sides so it fills the viewport
+  const MARGIN=80; // ft beyond lot edges
+  const lotX1=-cx-MARGIN, lotX2=lotW3-cx+MARGIN;
+  const lotZ1=-cz-MARGIN, lotZ2=lotH3-cz+MARGIN;
   const lotSW=lotX2-lotX1, lotSD=lotZ2-lotZ1;
 
-  // 2 segments per foot → vertex every 0.5ft; flat zones will be fully suppressed
-  const segsX=Math.min(Math.round(lotSW*2), 400);
-  const segsZ=Math.min(Math.round(lotSD*2), 400);
+  // 2 segments per foot so flat zones have sub-foot precision (capped at 500)
+  const segsX=Math.min(Math.round(lotSW*2), 500);
+  const segsZ=Math.min(Math.round(lotSD*2), 500);
 
   // Flat zones: rooms and graded areas suppress the slope at their elevation
   const flatZones=[];
