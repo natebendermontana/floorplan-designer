@@ -2457,61 +2457,67 @@ function rebuild3d(){
     }
   }
 
-  // Ground: a large tilted terrain plane.
-  // We use a BoxGeometry with many segments so we can keep it thick enough
-  // to fill below the structure without gaps.
-  // Terrain: vertex-displaced grid where each vertex Y = slopeOffset(x,z).
-  // This gives a true slope surface that correctly passes through every point.
-  const TERRAIN_SIZE=200;
-  const TERRAIN_SEGS=40; // enough segments to look smooth
-  const terrainGeo=new THREE.PlaneGeometry(TERRAIN_SIZE,TERRAIN_SIZE,TERRAIN_SEGS,TERRAIN_SEGS);
-  terrainGeo.rotateX(-Math.PI/2); // lay flat in XZ plane
+  // Terrain mesh sized exactly to the lot, with 1 vertex per foot for precision.
+  // Slope runs from one end of the lot to the other.
+  const lotW3=parseFloat(document.getElementById('lot-w').value)||100;
+  const lotH3=parseFloat(document.getElementById('lot-h').value)||100;
 
-  // Build a list of flat zones (rooms + graded areas) that suppress the slope.
-  // Each zone: { x1,x2,z1,z2 in scene coords, y: flat elevation }
+  // Lot in scene coords: lot origin is (0,0) canvas = (-cx,-cz) scene
+  const lotX1=-cx, lotX2=lotW3-cx;
+  const lotZ1=-cz, lotZ2=lotH3-cz;
+  const lotSW=lotX2-lotX1, lotSD=lotZ2-lotZ1;
+
+  // 2 segments per foot → vertex every 0.5ft; flat zones will be fully suppressed
+  const segsX=Math.min(Math.round(lotSW*2), 400);
+  const segsZ=Math.min(Math.round(lotSD*2), 400);
+
+  // Flat zones: rooms and graded areas suppress the slope at their elevation
   const flatZones=[];
   elements.forEach(el=>{
     if(el.type==='room'&&(el.floor||0)===0){
       flatZones.push({
-        x1:el.x/PX_PER_FT-cx,  x2:(el.x+el.w)/PX_PER_FT-cx,
-        z1:el.y/PX_PER_FT-cz,  z2:(el.y+el.h)/PX_PER_FT-cz,
+        x1:el.x/PX_PER_FT-cx, x2:(el.x+el.w)/PX_PER_FT-cx,
+        z1:el.y/PX_PER_FT-cz, z2:(el.y+el.h)/PX_PER_FT-cz,
         y: roomElev(el)
       });
     }
     if(el.type==='furniture'&&el.ftype==='graded-area'){
       const ex=el.x/PX_PER_FT-cx, ez=el.y/PX_PER_FT-cz;
-      const hw=el.fw/2, hd=el.fh/2;
       flatZones.push({
-        x1:ex-hw, x2:ex+hw, z1:ez-hd, z2:ez+hd,
+        x1:ex-el.fw/2, x2:ex+el.fw/2,
+        z1:ez-el.fh/2, z2:ez+el.fh/2,
         y: el.elevation ?? 0
       });
     }
   });
 
-  // Displace each vertex: raw slope, but clamped to room floor inside flat zones
+  // Build geometry manually so vertices sit exactly on the lot grid
+  const terrainGeo=new THREE.PlaneGeometry(lotSW, lotSD, segsX, segsZ);
+  terrainGeo.rotateX(-Math.PI/2);
+  // PlaneGeometry centres at origin; offset so it covers lotX1→lotX2, lotZ1→lotZ2
+  terrainGeo.translate((lotX1+lotX2)/2, 0, (lotZ1+lotZ2)/2);
+
   const pos=terrainGeo.attributes.position;
   for(let i=0;i<pos.count;i++){
     const vx=pos.getX(i), vz=pos.getZ(i);
     let y=slopeOffset(vx,vz);
-    // Inside a flat zone, clamp to the zone's floor level
-    for(const z of flatZones){
-      if(vx>=z.x1&&vx<=z.x2&&vz>=z.z1&&vz<=z.z2){
-        y=z.y; break;
-      }
+    for(const fz of flatZones){
+      if(vx>=fz.x1&&vx<=fz.x2&&vz>=fz.z1&&vz<=fz.z2){ y=fz.y; break; }
     }
-    pos.setY(i, y);
+    pos.setY(i,y);
   }
   pos.needsUpdate=true;
   terrainGeo.computeVertexNormals();
+
   const grassMat=new THREE.MeshLambertMaterial({color:0x3a6030,side:THREE.DoubleSide});
   const grass=new THREE.Mesh(terrainGeo,grassMat);
-  grass.receiveShadow=true;grass.userData.fp=true;scene3.add(grass);
+  grass.receiveShadow=true; grass.userData.fp=true; scene3.add(grass);
 
-  // Thick dirt box below to fill any gaps under the terrain surface
+  // Dirt fill box beneath the terrain — no slope needed, just fill the gap
   const dirtMat=new THREE.MeshLambertMaterial({color:0x5a4030});
-  const dirt=new THREE.Mesh(new THREE.BoxGeometry(TERRAIN_SIZE,20,TERRAIN_SIZE),dirtMat);
-  dirt.position.y=-10;
-  dirt.userData.fp=true;scene3.add(dirt);
+  const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW+20, 30, lotSD+20), dirtMat);
+  dirt.position.set((lotX1+lotX2)/2, -15, (lotZ1+lotZ2)/2);
+  dirt.userData.fp=true; scene3.add(dirt);
   applyFloorVisibility();
 }
 
