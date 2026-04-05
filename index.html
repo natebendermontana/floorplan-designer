@@ -1192,7 +1192,7 @@ function render2d() {
 // HIT TEST  (only hit elements on current floor)
 // ══════════════════════════════════════════════════
 function hitTest(x,y) {
-  const candidates = elements.filter(e=>(e.floor||0)===currentFloor);
+  const candidates = elements.filter(e=>e.type==='roof'?layerVisible.roof:((e.floor||0)===currentFloor&&layerVisible[(e.floor||0)]));
   for (let i=candidates.length-1; i>=0; i--) {
     const el=candidates[i];
     if(el.type==='wall'){
@@ -1221,7 +1221,7 @@ function rectSelect() {
   const rx2=Math.max(rectSelStart.x,rectSelEnd.x), ry2=Math.max(rectSelStart.y,rectSelEnd.y);
   if((rx2-rx1)<4&&(ry2-ry1)<4) return;
   multiSel=elements.filter(el=>{
-    if((el.floor||0)!==currentFloor) return false;
+    if(el.type==='roof'){ return layerVisible.roof; } if((el.floor||0)!==currentFloor) return false;
     const c=elCenter(el);
     return c.x>=rx1&&c.x<=rx2&&c.y>=ry1&&c.y<=ry2;
   });
