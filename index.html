@@ -1435,6 +1435,7 @@ function updateProps() {
     if(el.rtype==='gable'||el.rtype==='hip')
       html+=row('Ridge',`<select class="prop-input" id="pe-ridgedir"><option value="EW"${(el.ridgeDir||'EW')==='EW'?' selected':''}>E↔W</option><option value="NS"${el.ridgeDir==='NS'?' selected':''}>N↕S</option></select>`);
     html+=row('Overhang (ft)',inp('pe-overhang','number',el.overhang??1,'min="0" max="4" step="0.25"'));
+    html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
     html+=row('Width',val(`${(el.w/PX_PER_FT).toFixed(1)} ft`));
     html+=row('Depth',val(`${(el.h/PX_PER_FT).toFixed(1)} ft`));
   }
@@ -2446,17 +2447,31 @@ function rebuild3d(){
     } else if(el.type==='roof'){
       const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
       const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
-      const ov=el.overhang??1;          // overhang in scene feet
-      const pitch=el.pitch??6;          // rise per 12 run
+      const ov=el.overhang??1;
+      const pitch=el.pitch??6;
       const rtype=el.rtype||'gable';
       const ridgeDir=el.ridgeDir||'EW';
-      // Roof sits on top of wallH for this floor
+      const roofAng=-(el.angle||0);
       const roofBase=yBase+wallH;
+
+      // All roof geometry lives in a group so rotation works cleanly
+      const roofGroup=new THREE.Group();
+      roofGroup.position.set(rx+rw/2, 0, rz+rh/2);
+      roofGroup.rotation.y=roofAng;
+      roofGroup.userData.fp=true;
+      roofGroup.userData.isRoof=true;
+      roofGroup.visible=!!layerVisible.roof;
+      scene3.add(roofGroup);
+
       const roofMat=new THREE.MeshLambertMaterial({color:0x8a7060,side:THREE.DoubleSide});
       const ceilMat=new THREE.MeshLambertMaterial({color:0xd4cfc4,side:THREE.DoubleSide});
-      // Footprint with overhang
-      const x0=rx-ov, x1=rx+rw+ov, z0=rz-ov, z1=rz+rh+ov;
+
+      // Footprint in group-local coords (group centred at rx+rw/2, rz+rh/2)
+      const x0=-rw/2-ov, x1=rw/2+ov, z0=-rh/2-ov, z1=rh/2+ov;
       const fw3=x1-x0, fd3=z1-z0;
+
+      // addRF: add mesh to roofGroup (tagged via group)
+      const addRF=(mesh)=>{ roofGroup.add(mesh); return mesh; };
 
       const addRoofFace=(verts,mat)=>{
         // verts: array of {x,y,z} — build a flat polygon as BufferGeometry
@@ -2471,7 +2486,7 @@ function rebuild3d(){
         geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
         geo.computeVertexNormals();
         const m=new THREE.Mesh(geo,mat);
-        m.castShadow=true; addFP(m,fl);
+        m.castShadow=true; addRF(m);
       };
 
       const riseEW=((fd3/2)*(pitch/12)); // rise from eave to ridge for E-W ridge
@@ -2482,7 +2497,7 @@ function rebuild3d(){
         const geo=new THREE.BoxGeometry(fw3,0.3,fd3);
         const m=new THREE.Mesh(geo,roofMat);
         m.position.set(x0+fw3/2, roofBase+0.15, z0+fd3/2);
-        m.castShadow=true; addFP(m,fl);
+        m.castShadow=true; addRF(m);
 
       } else if(rtype==='shed'){
         // Wedge: low at z0, high at z1
@@ -2496,8 +2511,8 @@ function rebuild3d(){
         addRoofFace([{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x1,y:yLo,z:z1}], roofMat);
         // Fascia boards (front low edge, back high edge)
         const fas=new THREE.BoxGeometry(fw3,0.15,0.1);
-        const flo=new THREE.Mesh(fas,roofMat); flo.position.set(x0+fw3/2,yLo+0.075,z0); addFP(flo,fl);
-        const fhi=new THREE.Mesh(fas,roofMat); fhi.position.set(x0+fw3/2,yHi+0.075,z1); addFP(fhi,fl);
+        const flo=new THREE.Mesh(fas,roofMat); flo.position.set(x0+fw3/2,yLo+0.075,z0); addRF(flo);
+        const fhi=new THREE.Mesh(fas,roofMat); fhi.position.set(x0+fw3/2,yHi+0.075,z1); addRF(fhi);
 
       } else if(rtype==='gable'){
         if(ridgeDir==='EW'){
@@ -2513,7 +2528,7 @@ function rebuild3d(){
           // Ridge board
           const ridgeGeo=new THREE.BoxGeometry(fw3,0.15,0.1);
           const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set(x0+fw3/2,yRidge+0.075,zMid); addFP(ridgeMesh,fl);
+          ridgeMesh.position.set(x0+fw3/2,yRidge+0.075,zMid); addRF(ridgeMesh);
         } else {
           // Ridge runs north-south at midpoint of width (x)
           const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
@@ -2523,7 +2538,7 @@ function rebuild3d(){
           addRoofFace([{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1},{x:x1,y:roofBase,z:z1}], roofMat);
           const ridgeGeo=new THREE.BoxGeometry(0.1,0.15,fd3);
           const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set(xMid,yRidge+0.075,z0+fd3/2); addFP(ridgeMesh,fl);
+          ridgeMesh.position.set(xMid,yRidge+0.075,z0+fd3/2); addRF(ridgeMesh);
         }
 
       } else if(rtype==='hip'){
@@ -2545,7 +2560,7 @@ function rebuild3d(){
           // Ridge board
           const ridgeGeo=new THREE.BoxGeometry(xRidR-xRidL,0.12,0.1);
           const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set((xRidL+xRidR)/2,yRidge+0.06,zMid); addFP(ridgeMesh,fl);
+          ridgeMesh.position.set((xRidL+xRidR)/2,yRidge+0.06,zMid); addRF(ridgeMesh);
         } else {
           const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
           const ridgeHalf=(fd3-fw3)/2;
@@ -2556,7 +2571,7 @@ function rebuild3d(){
           addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
           const ridgeGeo=new THREE.BoxGeometry(0.1,0.12,zRidB-zRidT);
           const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set(xMid,yRidge+0.06,(zRidT+zRidB)/2); addFP(ridgeMesh,fl);
+          ridgeMesh.position.set(xMid,yRidge+0.06,(zRidT+zRidB)/2); addRF(ridgeMesh);
         }
       }
     } else if(el.type==='furniture'){
