@@ -1482,7 +1482,11 @@ function updateProps() {
     html+=row('Width (ft)',inp('pe-fw','number',el.fw,'min="1" max="30" step="0.5"'));
     html+=row('Depth (ft)',inp('pe-fh','number',el.fh,'min="1" max="30" step="0.5"'));
     html+=row('Rotation',inp('pe-angle','number',Math.round((el.angle||0)*180/Math.PI),'min="-180" max="180"'));
-    html+=row('Mirror','<button id="pe-flip" style="padding:3px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:'+(el.flip?'var(--bg2)':'transparent')+';color:'+(el.flip?'var(--accent)':'var(--text2)')+';cursor:pointer;font-size:11px">'+(el.flip?'&#x21D4; Flipped':'&#x21D4; Flip')+'</button>');}
+    html+=row('Mirror','<button id="pe-flip" style="padding:3px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:'+(el.flip?'var(--bg2)':'transparent')+';color:'+(el.flip?'var(--accent)':'var(--text2)')+';cursor:pointer;font-size:11px">'+(el.flip?'&#x21D4; Flipped':'&#x21D4; Flip')+'</button>');
+    if(el.ftype==='graded-area'){
+      html+=row('Pad elevation (ft)',inp('pe-elevation','number',el.elevation!=null?el.elevation.toFixed(1):'','step="0.5" placeholder="auto"'));
+      html+=row('Cut depth (ft)',inp('pe-cutdepth','number',el.cutDepth!=null?el.cutDepth.toFixed(1):'','min="0" max="20" step="0.5" placeholder="auto"'));
+    }}
   html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
   html+=`<button class="del-btn" id="pe-del">Delete</button>`;
   pane.innerHTML=html;
@@ -1506,6 +1510,11 @@ function updateProps() {
   bind('pe-elevation',e=>{
     const v=parseFloat(e.target.value);
     el.elevation = isNaN(v) ? undefined : v;
+    if(panel3dOpen) rebuild3d();
+  });
+  bind('pe-cutdepth',e=>{
+    const v=parseFloat(e.target.value);
+    el.cutDepth = isNaN(v)||v<=0 ? undefined : v;
     if(panel3dOpen) rebuild3d();
   });
   const _flipBtn=document.getElementById('pe-flip');
@@ -2860,43 +2869,54 @@ function rebuild3d(){
         for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
 
       } else if(t==='graded-area'){
-        // Graded area: flat concrete pad at yBase.
-        // Each side checks whether terrain is ABOVE pad (cut/retaining) or
-        // BELOW pad (fill/exposed). Renders appropriate face for each.
+        // Flat concrete pad. cutDepth = how deep the cut platform sits (default: auto from terrain).
         const padThk=0.2;
+        const cutDepth = el.cutDepth; // undefined = auto
+
         box3(fw, padThk, fh, 0xc8c0b0, 0, padThk/2, 0);
 
-        const retainCol=0x9a8878, fillCol=0xb09060, copingCol=0xb8ae9e, earthCol=0x7a6040;
+        const retainCol=0x9a8878, copingCol=0xb8ae9e, earthCol=0x7a6040;
         const wThk=0.22;
 
-        // Sample terrain at each edge midpoint (world 3D coords)
-        const edgeSamples=[
-          {x3:0,     z3:-fh/2, ww:fw,     wd:wThk, dir:'z', sign:-1}, // N edge
-          {x3:0,     z3: fh/2, ww:fw,     wd:wThk, dir:'z', sign: 1}, // S edge
-          {x3:-fw/2, z3:0,     ww:wThk,   wd:fh,   dir:'x', sign:-1}, // W edge
-          {x3: fw/2, z3:0,     ww:wThk,   wd:fh,   dir:'x', sign: 1}, // E edge
+        const edges=[
+          {x3:0,     z3:-fh/2, ww:fw,   dir:'z', sign:-1},
+          {x3:0,     z3: fh/2, ww:fw,   dir:'z', sign: 1},
+          {x3:-fw/2, z3:0,     ww:fh,   dir:'x', sign:-1},
+          {x3: fw/2, z3:0,     ww:fh,   dir:'x', sign: 1},
         ];
 
-        edgeSamples.forEach(({x3,z3,ww,wd,dir,sign})=>{
-          const terrainY=slopeOffset(fx2+x3, fz2+z3);
-          const diff=terrainY-yBase; // positive = terrain above pad (need retaining wall)
+        edges.forEach(({x3,z3,ww,dir,sign})=>{
+          const terrainY = slopeOffset(fx2+x3, fz2+z3);
+          // How far does the terrain stick up above pad? (retaining) or drop below? (skirt)
+          const wallH3 = cutDepth!=null
+            ? cutDepth                          // user-set depth: always show retaining this tall
+            : Math.max(0, terrainY - yBase);    // auto: just enough to meet terrain
 
-          if(diff>0.05){
-            // UPHILL side: retaining wall from pad surface up to terrain level
-            // Concrete face
-            box3(ww, diff+padThk, wThk, retainCol, x3, padThk/2+diff/2, z3);
-            // Coping strip
-            box3(ww+0.1, 0.1, wThk+0.1, copingCol, x3, padThk+diff+0.05, z3);
-            // Earth wedge behind the wall (triangular approximation with a tapered box)
-            // The earth rises from pad level at the wall face to terrain level some distance back
-            const earthDepth=Math.min(diff*1.5, dir==='z'?fh*0.4:fw*0.4);
-            box3(ww, diff*0.6, earthDepth, earthCol,
-              x3+sign*(wThk/2+earthDepth/2)*0,  // centred on wall
-              padThk+diff*0.3,
-              z3+sign*(wThk/2+earthDepth/2));
-
+          if(wallH3 > 0.05){
+            // Retaining wall face from pad surface up (or down depending on terrain)
+            const faceTop = yBase + Math.max(wallH3, terrainY - yBase);
+            const faceH   = faceTop - yBase + padThk;
+            box3(ww, faceH, wThk, retainCol, x3, -padThk/2 + faceH/2, z3);
+            // Coping strip on top
+            box3(ww+0.1, 0.1, wThk+0.1, copingCol, x3, faceTop + 0.05, z3);
+            // Earth wedge behind (uphill side only)
+            if(terrainY > yBase){
+              const earthDepth=Math.min(wallH3*1.5, dir==='z'?fh*0.35:fw*0.35);
+              if(earthDepth>0.1)
+                box3(ww, wallH3*0.5, earthDepth, earthCol,
+                  x3, yBase+wallH3*0.25, z3+sign*(wThk/2+earthDepth/2));
+            }
+          } else if(terrainY < yBase - 0.05){
+            // Downhill: render a thin skirt that tapers from pad-bottom down to terrain,
+            // hiding the gap without a visible wall face.
+            // The skirt is the same colour as the terrain/earth and very thin.
+            const drop = yBase - terrainY;
+            const skirtD = Math.min(drop * 0.8, 0.3); // thin tapered skirt depth
+            box3(ww, drop + padThk, skirtD, 0x8a7a60,
+              x3 + sign * (skirtD/2),
+              yBase - drop/2,
+              z3);
           }
-          // Downhill side: no wall — terrain blends seamlessly with pad edge
         });
 
       } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
