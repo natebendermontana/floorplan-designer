@@ -129,15 +129,18 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="layer-btn active" data-layer="0" title="Draw on ground floor">G</button>
   <button class="layer-btn" data-layer="1" title="Draw on upper floor">U</button>
   <button class="layer-btn" data-layer="roof" title="Place roofs">R</button>
+  <button class="layer-btn" data-layer="frame" title="Place timber frame members">F</button>
   <div class="tb-sep"></div>
   <span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">Show:</span>
   <button class="vis-btn active" data-vis="0" title="Toggle ground floor visibility">G</button>
   <button class="vis-btn active" data-vis="1" title="Toggle upper floor visibility">U</button>
   <button class="vis-btn active" data-vis="roof" title="Toggle roof visibility">R</button>
+  <button class="vis-btn active" data-vis="frame" title="Toggle timber frame visibility">F</button>
   <div class="tb-sep"></div>
   <button class="dd-btn" id="dd-draw-btn" title="Draw tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14l1.5-4L11 2.5l2.5 2.5-7.5 7.5L2 14z"/></svg>Draw ▾</button>
   <button class="dd-btn" id="dd-open-btn" title="Doors &amp; Windows"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="1" width="10" height="13"/><path d="M3 1 A6 6 0 0 1 9 7"/></svg>Open ▾</button>
   <button class="dd-btn" id="dd-furn-btn" title="Furniture"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="6" width="14" height="6"/><rect x="1" y="4" width="3" height="8"/><rect x="12" y="4" width="3" height="8"/></svg>Furn ▾</button>
+  <button class="dd-btn" id="dd-timber-btn" title="Timber frame"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="2" x2="4" y2="14"/><line x1="12" y1="2" x2="12" y2="14"/><line x1="4" y1="5" x2="12" y2="5"/><line x1="5" y1="5" x2="4" y2="8"/><line x1="11" y1="5" x2="12" y2="8"/></svg>Timber ▾</button>
   <button class="dd-btn" id="dd-roof-btn" title="Roof tools"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 10 L8 2 L15 10"/><path d="M3 10 L3 14 L13 14 L13 10"/></svg>Roof ▾</button>
   <button class="dd-btn" id="dd-out-btn" title="Outdoor"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="4"/><line x1="8" y1="10" x2="8" y2="15"/><line x1="4" y1="15" x2="12" y2="15"/></svg>Out ▾</button>
   <div class="tb-sep"></div>
@@ -205,6 +208,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
         <button class="ph-btn" id="vis-fl-0" title="Toggle ground floor">G</button>
         <button class="ph-btn" id="vis-fl-1" title="Toggle upper floor">U</button>
         <button class="ph-btn" id="vis-roof" title="Toggle roof">R</button>
+        <button class="ph-btn" id="vis-frame" title="Toggle timber frame">F</button>
         <button class="ph-btn" id="btn-3d-wider" title="Wider">&#x2190;&#x2192;</button>
         <button class="ph-btn" id="btn-3d-narrower" title="Narrower">&#x2192;&#x2190;</button>
         <button class="ph-btn" id="btn-3d-fullscreen" title="Fullscreen">&#x26F6;</button>
@@ -253,11 +257,11 @@ let elements = [], history = [];
 // ── Layer / visibility system (shared 2D + 3D) ─────────────────────────────
 let currentLayer  = 0;          // active drawing layer: 0, 1, or 'roof'
 let currentFloor  = 0;          // floor for non-roof placement (0 or 1)
-const layerVisible = {0:true, 1:true, roof:true};
+const layerVisible = {0:true, 1:true, roof:true, frame:true};
 
 function setLayer(layer) {
   currentLayer = layer;
-  currentFloor = (layer === 'roof') ? 0 : +layer;
+  currentFloor = (layer === 'roof' || layer === 'frame') ? 0 : +layer;
   // Sync draw-layer buttons
   document.querySelectorAll('.layer-btn').forEach(b => {
     const bl = (b.dataset.layer === 'roof') ? 'roof' : +b.dataset.layer;
@@ -279,7 +283,7 @@ function toggleLayerVisible(layer) {
 }
 
 function syncVis3dBtns() {
-  [{id:'vis-fl-0',key:0},{id:'vis-fl-1',key:1},{id:'vis-roof',key:'roof'}].forEach(({id,key})=>{
+  [{id:'vis-fl-0',key:0},{id:'vis-fl-1',key:1},{id:'vis-roof',key:'roof'},{id:'vis-frame',key:'frame'}].forEach(({id,key})=>{
     const b = document.getElementById(id);
     if (!b) return;
     b.style.opacity    = layerVisible[key] ? '1' : '0.35';
@@ -358,6 +362,9 @@ function geometricSnap(cx, cy, movingEl) {
     if(el.type === 'wall'){
       candidates.push({x: el.x1, y: el.y1, axis:'both'});
       candidates.push({x: el.x2, y: el.y2, axis:'both'});
+    }
+    if(el.type === 'member' && el.role === 'post'){
+      candidates.push({x: el.x1, y: el.y1, axis:'both'});
     }
   });
 
@@ -642,6 +649,52 @@ function drawRoof(el, sel) {
   ctx.restore(); // back to unrotated world space
   ctx.globalAlpha=1;
   if(sel) drawHandles(el); // handles drawn in world space (they're already at correct positions)
+}
+
+function drawMember(el, sel) {
+  const TIMBER_COL='#C68642', TIMBER_SEL='#E8A020', POST_COL='#A0522D', POST_SEL='#C86420';
+  const col=sel?(el.role==='post'?POST_SEL:TIMBER_SEL):(el.role==='post'?POST_COL:TIMBER_COL);
+  const alpha=layerVisible.frame?(currentLayer==='frame'?1.0:0.55):0;
+  if(alpha===0) return;
+  ctx.save(); ctx.globalAlpha=alpha;
+  if(el.role==='post'){
+    const sz=Math.max(6,(el.sectionW/12)*PX_PER_FT);
+    ctx.fillStyle=col; ctx.fillRect(el.x1-sz/2,el.y1-sz/2,sz,sz);
+    if(sel){
+      ctx.strokeStyle=TIMBER_SEL; ctx.lineWidth=2; ctx.setLineDash([]);
+      ctx.strokeRect(el.x1-sz/2-2,el.y1-sz/2-2,sz+4,sz+4);
+      ctx.strokeStyle='rgba(200,134,66,0.2)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.arc(el.x1,el.y1,6*PX_PER_FT,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if(PX_PER_FT>12){
+      ctx.font=Math.max(7,PX_PER_FT*0.32)+'px -apple-system,sans-serif';
+      ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(el.sectionW+'x'+el.sectionH,el.x1,el.y1);
+    }
+  } else {
+    const thick={beam:5,plate:4,ridge:5,brace:3}[el.role]||4;
+    ctx.strokeStyle=col; ctx.lineWidth=sel?thick+1.5:thick; ctx.lineCap='round'; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
+    const dx=el.x2-el.x1,dy=el.y2-el.y1,len=Math.hypot(dx,dy);
+    if(len>0){
+      const nx=-dy/len*5,ny=dx/len*5; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(el.x1+nx,el.y1+ny); ctx.lineTo(el.x1-nx,el.y1-ny); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(el.x2+nx,el.y2+ny); ctx.lineTo(el.x2-nx,el.y2-ny); ctx.stroke();
+    }
+    if(len>PX_PER_FT*2){
+      const mx=(el.x1+el.x2)/2, my=(el.y1+el.y2)/2;
+      const ang=Math.atan2(dy,dx);
+      ctx.save(); ctx.translate(mx,my); ctx.rotate(ang);
+      ctx.font=Math.max(8,Math.min(11,PX_PER_FT*0.5))+'px -apple-system,sans-serif';
+      ctx.fillStyle=col; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      const lbl={beam:'BEAM',plate:'PLATE',ridge:'RIDGE',brace:'BRACE'}[el.role]||el.role.toUpperCase();
+      ctx.fillText(lbl+' '+el.sectionW+'x'+el.sectionH+'"',0,-3);
+      ctx.restore();
+    }
+    if(sel) drawHandles(el);
+  }
+  ctx.restore();
 }
 
 function drawWall(el, sel) {
@@ -1172,6 +1225,10 @@ function render2d() {
       const rx=Math.min(ps.x,pe.x),ry=Math.min(ps.y,pe.y),rw=Math.abs(pe.x-ps.x),rh=Math.abs(pe.y-ps.y);
       ctx.strokeRect(rx,ry,rw,rh); ctx.setLineDash([]);
       document.getElementById('st-dim').textContent=`${(rw/PX_PER_FT).toFixed(1)} × ${(rh/PX_PER_FT).toFixed(1)} ft`;
+    } else if(tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'){
+      ctx.strokeStyle='#C68642'; ctx.lineWidth=tool==='member-brace'?3:5; ctx.lineCap='round'; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(ps.x,ps.y); ctx.lineTo(pe.x,pe.y); ctx.stroke();
+      document.getElementById('st-dim').textContent=`${(Math.hypot(pe.x-ps.x,pe.y-ps.y)/PX_PER_FT).toFixed(1)} ft`;
     }
     ctx.globalAlpha=1;
   }
@@ -1213,6 +1270,85 @@ function hitTest(x,y) {
       if(x>=el.x&&x<=el.x+el.w&&y>=el.y&&y<=el.y+el.h)return el;
     } else if(el.type==='window'||el.type==='door'){
       if(Math.hypot(x-el.x,y-el.y)<35)return el;
+
+    } else if(el.type==='member'){
+      // ── Timber frame member ──────────────────────────────────────
+      const sw=el.sectionW/12, sh=el.sectionH/12; // inches → feet
+      const timberMat=new THREE.MeshLambertMaterial({color:0xC68642});
+      const postMat  =new THREE.MeshLambertMaterial({color:0xA0522D});
+
+      // addFM: tag as frame mesh
+      const addFM=(mesh)=>{
+        mesh.userData.fp=true; mesh.userData.isFrame=true;
+        mesh.visible=!!layerVisible.frame; scene3.add(mesh); return mesh;
+      };
+
+      if(el.role==='post'){
+        // Vertical box from yBase to yBase+memberHeight (default wallH)
+        const pH = el.memberHeight!=null ? el.memberHeight : wallH;
+        const px=el.x1/PX_PER_FT-cx, pz=el.y1/PX_PER_FT-cz;
+        const geo=new THREE.BoxGeometry(sw, pH, sh);
+        const m=new THREE.Mesh(geo, postMat);
+        m.position.set(px, yBase+pH/2, pz);
+        m.castShadow=true; addFM(m);
+        // Base plate (thin slab under post)
+        const bp=new THREE.Mesh(new THREE.BoxGeometry(sw+0.1,0.08,sh+0.1),postMat);
+        bp.position.set(px, yBase+0.04, pz); addFM(bp);
+
+      } else {
+        // Line member: beam, plate, ridge, brace
+        const x1=el.x1/PX_PER_FT-cx, z1=el.y1/PX_PER_FT-cz;
+        const x2=el.x2/PX_PER_FT-cx, z2=el.y2/PX_PER_FT-cz;
+        const dx=x2-x1, dz=z2-z1;
+        const hLen=Math.hypot(dx,dz); // horizontal length
+        if(hLen < 0.01) { /* skip zero-length */ } else {
+
+          // Determine elevation
+          let mElev = el.memberElev!=null ? el.memberElev : wallH;
+          if(el.role==='ridge'){
+            // Auto ridge height: find a roof element whose footprint covers this member
+            const rx=(el.x1+el.x2)/2, rz=(el.y1+el.y2)/2;
+            const under=elements.find(r=>r.type==='roof'&&
+              r.x/PX_PER_FT-cx<rx&&(r.x+r.w)/PX_PER_FT-cx>rx&&
+              r.y/PX_PER_FT-cz<rz&&(r.y+r.h)/PX_PER_FT-cz>rz);
+            if(under){
+              const rw3=under.w/PX_PER_FT, rh3=under.h/PX_PER_FT;
+              const useEW=rw3>=rh3;
+              const span=useEW?rh3:rw3;
+              mElev=wallH+(span/2)*(under.pitch??6)/12;
+            }
+          }
+
+          if(el.role==='brace'){
+            // Brace: diagonal in the vertical plane along the member's plan direction
+            // Rises 45° from yBase+braceStart up to beam elevation
+            const braceStart=wallH*(2/3); // spring point at 2/3 up post
+            const hRun=hLen; // horizontal run = drawn length
+            const vRise=hRun; // 45° so vertical rise = horizontal run
+            const totalLen=Math.hypot(hRun,vRise);
+            const yMid=yBase+braceStart+vRise/2;
+            const geo=new THREE.BoxGeometry(totalLen, sh, sw);
+            const m=new THREE.Mesh(geo, timberMat);
+            // Position at midpoint
+            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
+            // Rotate in plan (around Y axis)
+            const planAng=Math.atan2(dz, dx);
+            m.rotation.y=-planAng;
+            // Tilt up (around Z in local space = around the perpendicular of the plan direction)
+            m.rotation.z=Math.atan2(vRise, hRun);
+            m.castShadow=true; addFM(m);
+          } else {
+            // Beam / plate / ridge: horizontal box along plan direction at mElev
+            const yMid=yBase+mElev-sh/2; // bottom of beam at mElev
+            const geo=new THREE.BoxGeometry(hLen, sh, sw);
+            const m=new THREE.Mesh(geo, timberMat);
+            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
+            const planAng=Math.atan2(dz, dx);
+            m.rotation.y=-planAng;
+            m.castShadow=true; addFM(m);
+          }
+        }
+      }
 
     } else if(el.type==='furniture'){
       const ang=-(el.angle||0),pw=el.fw*PX_PER_FT/2,ph=el.fh*PX_PER_FT/2;
@@ -1271,11 +1407,13 @@ canvas2d.addEventListener('mousemove',e=>{
     activeSnapHint=null;
     targets.forEach((el,i)=>{
       const o=dragMultiOrigins[i];
-      if(el.type==='wall'){
-        // Snap wall endpoints independently
+      if(el.type==='wall'||(el.type==='member'&&el.role!=='post')){
         const p1=geometricSnap(snap(o.x1+dx), snap(o.y1+dy), el);
         const p2=geometricSnap(snap(o.x2+dx), snap(o.y2+dy), el);
         el.x1=p1.x; el.y1=p1.y; el.x2=p2.x; el.y2=p2.y;
+      } else if(el.type==='member'&&el.role==='post'){
+        const gs=geometricSnap(snap(o.x1+dx),snap(o.y1+dy),el);
+        el.x1=gs.x; el.y1=gs.y; el.x2=gs.x; el.y2=gs.y;
       } else if(el.type==='room'||el.type==='roof'){
         const gs=geometricSnap(snap(o.x+dx), snap(o.y+dy), el);
         // Also try snapping right/bottom edge
@@ -1340,7 +1478,7 @@ canvas2d.addEventListener('mousedown',e=>{
   if(e.button===1||(e.button===0&&spaceDown))return; // handled by pan
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='rect-select'){rectSelActive=true;rectSelStart={x,y};rectSelEnd={x,y};return;}
-  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
+  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'||tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
   const DOOR_TOOLS  =['door','double-door','sliding-door','pocket-door'];
   const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
   if(DOOR_TOOLS.includes(tool)){
@@ -1357,6 +1495,11 @@ canvas2d.addEventListener('mousedown',e=>{
     const d=FDEFS[tool];saveHistory();
     const newFur={type:'furniture',ftype:tool,x:sp.x,y:sp.y,fw:d.w,fh:d.h,angle:0,floor:currentFloor};
     elements.push(newFur);switchToSelect(newFur);render2d();return;
+  } else if(tool==='member-post'){
+    saveHistory();
+    const newPost={type:'member',role:'post',x1:sp.x,y1:sp.y,x2:sp.x,y2:sp.y,
+      sectionW:6,sectionH:6,memberHeight:null,floor:'frame'};
+    elements.push(newPost);switchToSelect(newPost);render2d();return;
   }
   if(tool==='select'){
     if(selected){const h=hitHandle(selected,x,y);if(h){activeHandle={type:h.type,role:h.role,el:selected,origin:JSON.parse(JSON.stringify(selected)),mouseStart:{x,y}};return;}}
@@ -1397,6 +1540,23 @@ canvas2d.addEventListener('mouseup',e=>{
         w:rw,h:rh,pitch:6,ridgeDir:'EW',overhang:1,floor:'roof'};
       saveHistory();elements.push(newRoof);switchToSelect(newRoof);
     }
+  } else if(tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'){
+    if(Math.hypot(sp.x-previewStart.x,sp.y-previewStart.y)>4){
+      const role=tool.replace('member-','');
+      const defaults={beam:{sW:6,sH:10,elev:null},plate:{sW:6,sH:8,elev:null},ridge:{sW:6,sH:10,elev:null},brace:{sW:4,sH:6,elev:null}};
+      const d=defaults[role]||{sW:6,sH:6,elev:null};
+      const snap45=(x1,y1,x2,y2)=>{
+        if(role!=='brace') return {x2,y2};
+        // Braces snap to 45° increments
+        const dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);
+        const ang=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);
+        return {x2:x1+Math.cos(ang)*len, y2:y1+Math.sin(ang)*len};
+      };
+      const s45=snap45(previewStart.x,previewStart.y,sp.x,sp.y);
+      const newMember={type:'member',role,x1:previewStart.x,y1:previewStart.y,
+        x2:s45.x2,y2:s45.y2,sectionW:d.sW,sectionH:d.sH,memberElev:d.elev,floor:'frame'};
+      saveHistory();elements.push(newMember);switchToSelect(newMember);
+    }
   }
   drawing=false;previewStart=null;previewEnd=null;
   document.getElementById('st-dim').textContent='';render2d();
@@ -1436,7 +1596,27 @@ function updateProps() {
   const inp=(id,type,value,extra='')=>`<input class="prop-input" id="${id}" type="${type}" value="${value}" ${extra}>`;
   const sel2=(id,opts,cur)=>`<select class="prop-input" id="${id}">${opts.map(([v,l])=>`<option value="${v}"${v==cur?' selected':''}>${l}</option>`).join('')}</select>`;
   let html='';
-  if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
+  if(el.type==='member'){
+    const roleLabel={post:'Post',beam:'Beam',plate:'Wall Plate',ridge:'Ridge Beam',brace:'Knee Brace'}[el.role]||el.role;
+    html+=row('Role', `<strong style="color:var(--text)">${roleLabel}</strong>`);
+    const sections=[['4x4','4×4"'],['6x6','6×6"'],['6x8','6×8"'],['6x10','6×10"'],['6x12','6×12"'],['8x8','8×8"'],['8x10','8×10"'],['8x12','8×12"']];
+    const curSec=`${el.sectionW}x${el.sectionH}`;
+    html+=row('Section',`<select class="prop-input" id="pe-section">${sections.map(([v,l])=>`<option value="${v}"${v===curSec?' selected':''}>${l}</option>`).join('')}<option value="custom"${!sections.find(([v])=>v===curSec)?' selected':''}>Custom…</option></select>`);
+    if(!sections.find(([v])=>v===curSec)){
+      html+=row('W (in)',inp('pe-secw','number',el.sectionW,'min="2" max="24" step="1"'));
+      html+=row('H (in)',inp('pe-sech','number',el.sectionH,'min="2" max="24" step="1"'));
+    }
+    if(el.role==='post'){
+      html+=row('Height (ft)',inp('pe-mheight','number',el.memberHeight!=null?el.memberHeight:'','placeholder="wall height" step="0.5"'));
+    } else {
+      html+=row('Elevation (ft)',inp('pe-melev','number',el.memberElev!=null?el.memberElev:'','placeholder="wall height" step="0.5"'));
+    }
+    if(el.role!=='post'){
+      const len=(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(1);
+      html+=row('Length',val(`${len} ft`));
+    }
+  }
+  else if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
   else if(el.type==='roof'){
     const rtypes=[['flat','Flat'],['shed','Shed'],['gable','Gable'],['hip','Hip']];
     html+=row('Style',`<select class="prop-input" id="pe-rtype">${rtypes.map(([v,l])=>`<option value="${v}"${(el.rtype||'gable')===v?' selected':''}>${l}</option>`).join('')}</select>`);
@@ -1503,6 +1683,14 @@ function updateProps() {
   bind('pe-winh', e=>{const v=parseFloat(e.target.value); el.winH = isNaN(v)||v<=0 ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-sillh',e=>{const v=parseFloat(e.target.value); el.sillH= isNaN(v)||v<0  ? undefined : v; if(panel3dOpen)rebuild3d();});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
+  bind('pe-section',e=>{
+    if(e.target.value!=='custom'){const [w,h]=e.target.value.split('x').map(Number);el.sectionW=w;el.sectionH=h;}
+    updateProps();render2d();if(panel3dOpen)rebuild3d();
+  });
+  bind('pe-secw',e=>{el.sectionW=parseInt(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
+  bind('pe-sech',e=>{el.sectionH=parseInt(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
+  bind('pe-mheight',e=>{const v=parseFloat(e.target.value);el.memberHeight=isNaN(v)?null:v;if(panel3dOpen)rebuild3d();});
+  bind('pe-melev',e=>{const v=parseFloat(e.target.value);el.memberElev=isNaN(v)?null:v;if(panel3dOpen)rebuild3d();});
   bind('pe-rtype',e=>{el.rtype=e.target.value;updateProps();render2d();if(panel3dOpen)rebuild3d();});
   bind('pe-pitch',e=>{el.pitch=parseFloat(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
   bind('pe-ridgedir',e=>{el.ridgeDir=e.target.value;render2d();if(panel3dOpen)rebuild3d();});
@@ -1548,9 +1736,9 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={'roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Drag to place a knee brace (4×6", 45°, 2.5 ft run)','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
-const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-roof-btn':'dd-roof','dd-out-btn':'dd-out'};
+const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-timber-btn':'dd-timber','dd-roof-btn':'dd-roof','dd-out-btn':'dd-out'};
 
 function closeAllDropdowns(){
   Object.keys(DD_MAP).forEach(b=>{
@@ -2006,7 +2194,8 @@ function applyFloorVisibility() {
   if (!scene3) return;
   scene3.children.forEach(c => {
     if (!c.userData.fp) return;
-    if (c.userData.isRoof) { c.visible = !!layerVisible.roof; return; }
+    if (c.userData.isRoof)  { c.visible = !!layerVisible.roof;  return; }
+    if (c.userData.isFrame) { c.visible = !!layerVisible.frame; return; }
     if (c.userData.floorNum !== undefined)
       c.visible = !!layerVisible[c.userData.floorNum];
   });
@@ -2016,6 +2205,7 @@ function applyFloorVisibility() {
 document.getElementById('vis-fl-0').addEventListener('click', () => toggleLayerVisible(0));
 document.getElementById('vis-fl-1').addEventListener('click', () => toggleLayerVisible(1));
 document.getElementById('vis-roof').addEventListener('click', () => toggleLayerVisible('roof'));
+document.getElementById('vis-frame').addEventListener('click', () => toggleLayerVisible('frame'));
 
 function rebuild3d(){
   if(!scene3)return;
@@ -2140,6 +2330,7 @@ function rebuild3d(){
     let ex3=0,ez3=0;
     if(el.type==='room'){ex3=(el.x+el.w/2)/PX_PER_FT-cx;ez3=(el.y+el.h/2)/PX_PER_FT-cz;}
     else if(el.type==='wall'){ex3=(el.x1+el.x2)/2/PX_PER_FT-cx;ez3=(el.y1+el.y2)/2/PX_PER_FT-cz;}
+    else if(el.type==='member'){ex3=el.x1/PX_PER_FT-cx;ez3=el.y1/PX_PER_FT-cz;}
     else{ex3=el.x/PX_PER_FT-cx;ez3=el.y/PX_PER_FT-cz;}
 
     let yBase;
@@ -2166,6 +2357,13 @@ function rebuild3d(){
       if(room) yBase=roomElev(room);
       else if(el.fixedElev) yBase=0;          // user pinned to floor level
       else yBase=slopeOffset(ex3,ez3);        // default: follows terrain
+    } else if(el.type==='member'){
+      // Posts: terrain height at placement point. Beams/braces: floor level (elevation is absolute).
+      if(el.role==='post'){
+        yBase = slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
+      } else {
+        yBase = 0;
+      }
     } else if(el.type==='roof'){
       // Roof sits on top of the highest floor that has rooms beneath its footprint.
       // Check for upper-floor rooms first; if any exist, roof goes on top of them.
@@ -2470,6 +2668,13 @@ function rebuild3d(){
       sill.position.set(wx3, yBase+sillH-0.03, wz3);
       sill.rotation.y=wAng; addFP(sill,fl);
 
+    } else if(el.type==='member'){
+      // Posts: terrain height at placement point. Beams/braces: floor level (elevation is absolute).
+      if(el.role==='post'){
+        yBase = slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
+      } else {
+        yBase = 0;
+      }
     } else if(el.type==='roof'){
       const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
       const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
@@ -2600,6 +2805,85 @@ function rebuild3d(){
           ridgeMesh.position.set(xMid,yRidge+0.06,(zRidT+zRidB)/2); addRF(ridgeMesh);
         }
       }
+    } else if(el.type==='member'){
+      // ── Timber frame member ──────────────────────────────────────
+      const sw=el.sectionW/12, sh=el.sectionH/12; // inches → feet
+      const timberMat=new THREE.MeshLambertMaterial({color:0xC68642});
+      const postMat  =new THREE.MeshLambertMaterial({color:0xA0522D});
+
+      // addFM: tag as frame mesh
+      const addFM=(mesh)=>{
+        mesh.userData.fp=true; mesh.userData.isFrame=true;
+        mesh.visible=!!layerVisible.frame; scene3.add(mesh); return mesh;
+      };
+
+      if(el.role==='post'){
+        // Vertical box from yBase to yBase+memberHeight (default wallH)
+        const pH = el.memberHeight!=null ? el.memberHeight : wallH;
+        const px=el.x1/PX_PER_FT-cx, pz=el.y1/PX_PER_FT-cz;
+        const geo=new THREE.BoxGeometry(sw, pH, sh);
+        const m=new THREE.Mesh(geo, postMat);
+        m.position.set(px, yBase+pH/2, pz);
+        m.castShadow=true; addFM(m);
+        // Base plate (thin slab under post)
+        const bp=new THREE.Mesh(new THREE.BoxGeometry(sw+0.1,0.08,sh+0.1),postMat);
+        bp.position.set(px, yBase+0.04, pz); addFM(bp);
+
+      } else {
+        // Line member: beam, plate, ridge, brace
+        const x1=el.x1/PX_PER_FT-cx, z1=el.y1/PX_PER_FT-cz;
+        const x2=el.x2/PX_PER_FT-cx, z2=el.y2/PX_PER_FT-cz;
+        const dx=x2-x1, dz=z2-z1;
+        const hLen=Math.hypot(dx,dz); // horizontal length
+        if(hLen < 0.01) { /* skip zero-length */ } else {
+
+          // Determine elevation
+          let mElev = el.memberElev!=null ? el.memberElev : wallH;
+          if(el.role==='ridge'){
+            // Auto ridge height: find a roof element whose footprint covers this member
+            const rx=(el.x1+el.x2)/2, rz=(el.y1+el.y2)/2;
+            const under=elements.find(r=>r.type==='roof'&&
+              r.x/PX_PER_FT-cx<rx&&(r.x+r.w)/PX_PER_FT-cx>rx&&
+              r.y/PX_PER_FT-cz<rz&&(r.y+r.h)/PX_PER_FT-cz>rz);
+            if(under){
+              const rw3=under.w/PX_PER_FT, rh3=under.h/PX_PER_FT;
+              const useEW=rw3>=rh3;
+              const span=useEW?rh3:rw3;
+              mElev=wallH+(span/2)*(under.pitch??6)/12;
+            }
+          }
+
+          if(el.role==='brace'){
+            // Brace: diagonal in the vertical plane along the member's plan direction
+            // Rises 45° from yBase+braceStart up to beam elevation
+            const braceStart=wallH*(2/3); // spring point at 2/3 up post
+            const hRun=hLen; // horizontal run = drawn length
+            const vRise=hRun; // 45° so vertical rise = horizontal run
+            const totalLen=Math.hypot(hRun,vRise);
+            const yMid=yBase+braceStart+vRise/2;
+            const geo=new THREE.BoxGeometry(totalLen, sh, sw);
+            const m=new THREE.Mesh(geo, timberMat);
+            // Position at midpoint
+            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
+            // Rotate in plan (around Y axis)
+            const planAng=Math.atan2(dz, dx);
+            m.rotation.y=-planAng;
+            // Tilt up (around Z in local space = around the perpendicular of the plan direction)
+            m.rotation.z=Math.atan2(vRise, hRun);
+            m.castShadow=true; addFM(m);
+          } else {
+            // Beam / plate / ridge: horizontal box along plan direction at mElev
+            const yMid=yBase+mElev-sh/2; // bottom of beam at mElev
+            const geo=new THREE.BoxGeometry(hLen, sh, sw);
+            const m=new THREE.Mesh(geo, timberMat);
+            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
+            const planAng=Math.atan2(dz, dx);
+            m.rotation.y=-planAng;
+            m.castShadow=true; addFM(m);
+          }
+        }
+      }
+
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
       const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
@@ -3145,6 +3429,34 @@ setTimeout(fitView, 50);
       <button class="tool-tile" data-tool="shower"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="12" height="12"/><circle cx="9" cy="8" r="2"/></svg>Shower</button>
       <button class="tool-tile" data-tool="sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="12" height="9" rx="1"/><ellipse cx="9" cy="10" rx="4" ry="3"/></svg>Sink</button>
       <button class="tool-tile" data-tool="double-sink"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="16" height="9" rx="1"/><ellipse cx="5" cy="10" rx="3" ry="2.5"/><ellipse cx="13" cy="10" rx="3" ry="2.5"/></svg>Dbl sink</button>
+    </div>
+  </div>
+</div>
+
+<!-- TIMBER FRAME dropdown -->
+<div class="dd-panel" id="dd-timber">
+  <div class="dd-section">
+    <div class="dd-label">Vertical</div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="member-post"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="2" width="4" height="14" rx="0.5"/><line x1="6" y1="2" x2="12" y2="2"/><line x1="6" y1="16" x2="12" y2="16"/></svg>Post</button>
+    </div>
+    <div class="dd-label">Horizontal</div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="member-beam"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="14" height="4" rx="0.5"/><line x1="2" y1="6" x2="2" y2="12"/><line x1="16" y1="6" x2="16" y2="12"/></svg>Beam</button>
+      <button class="tool-tile" data-tool="member-plate"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="14" height="3" rx="0.5"/><line x1="2" y1="6" x2="16" y2="6"/></svg>Plate</button>
+      <button class="tool-tile" data-tool="member-ridge"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14 L9 4 L16 14"/><rect x="7" y="3" width="4" height="3" rx="0.5"/></svg>Ridge</button>
+    </div>
+    <div class="dd-label">Diagonal</div>
+    <div class="tool-grid">
+      <button class="tool-tile" data-tool="member-brace"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="2" x2="4" y2="12"/><line x1="4" y1="6" x2="14" y2="6"/><line x1="4" y1="12" x2="10" y2="6" stroke-width="2"/></svg>Brace</button>
+    </div>
+    <div class="dd-label">Defaults (spacing suggestion)</div>
+    <div style="padding:4px 4px 2px;font-size:10px;color:var(--text3);line-height:1.5">
+      Post: 6×6" · 12 ft o.c.<br>
+      Beam: 6×10" at wall height<br>
+      Plate: 6×8" at wall height<br>
+      Ridge: 6×10" at apex<br>
+      Brace: 4×6" · 45° · 2.5 ft run
     </div>
   </div>
 </div>
