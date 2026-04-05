@@ -2158,12 +2158,20 @@ function rebuild3d(){
       else if(el.fixedElev) yBase=0;          // user pinned to floor level
       else yBase=slopeOffset(ex3,ez3);        // default: follows terrain
     } else if(el.type==='roof'){
-      // Roof sits at the wall-top of whatever floor it's on
-      const room=containingRoom(el.x+el.w/2, el.y+el.h/2, fl);
-      yBase = room ? roomElev(room) : (fl===1 ? (()=>{
-        const below=bestGroundRoomBelow(el.x,el.y,el.w,el.h);
-        return below ? groundRoomElev(below)+wallH+FLOOR_SEP : 0;
-      })() : 0);
+      // Roof sits on top of the highest floor that has rooms beneath its footprint.
+      // Check for upper-floor rooms first; if any exist, roof goes on top of them.
+      // If only ground-floor rooms, roof goes on top of those.
+      const hasUpperRooms = elements.some(r =>
+        r.type==='room' && (r.floor||0)===1 &&
+        r.x < el.x+el.w && r.x+r.w > el.x &&
+        r.y < el.y+el.h && r.y+r.h > el.y);
+      if(hasUpperRooms){
+        const below = bestGroundRoomBelow(el.x, el.y, el.w, el.h);
+        yBase = below ? groundRoomElev(below)+wallH+FLOOR_SEP : wallH+FLOOR_SEP;
+      } else {
+        const below = bestGroundRoomBelow(el.x, el.y, el.w, el.h);
+        yBase = below ? groundRoomElev(below) : 0;
+      }
     } else {
       yBase=slopeOffset(ex3,ez3);
     }
