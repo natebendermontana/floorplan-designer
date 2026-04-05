@@ -2895,12 +2895,8 @@ function rebuild3d(){
               padThk+diff*0.3,
               z3+sign*(wThk/2+earthDepth/2));
 
-          } else if(diff<-0.05){
-            // DOWNHILL side: exposed fill face from terrain level up to pad
-            const fillH=Math.abs(diff)+padThk;
-            box3(ww, fillH, wThk, fillCol, x3, padThk/2-Math.abs(diff)/2, z3);
           }
-          // Near-flat: no wall needed
+          // Downhill side: no wall — terrain blends seamlessly with pad edge
         });
 
       } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
