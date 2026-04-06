@@ -295,7 +295,8 @@ let tool = 'select';
 // currentFloor declared in layer system above
 let drawing = false, previewStart = null, previewEnd = null;
 let dragEl = null, dragStart = null;
-let activeSnapHint = null; // {x,y} canvas px — drawn as indicator during drag
+let activeSnapHint = null;
+let braceFirstEl = null;  // post selected as first click for brace tool // {x,y} canvas px — drawn as indicator during drag
 let dragMultiOrigins = null;
 let activeHandle = null;
 let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
@@ -670,6 +671,12 @@ function drawMember(el, sel) {
       ctx.fillText(el.sectionW+'x'+el.sectionH,el.x1,el.y1);
     }
   } else {
+    // Highlight first-selected post for brace tool
+    if(el===braceFirstEl){
+      ctx.strokeStyle='#F59E0B'; ctx.lineWidth=3; ctx.setLineDash([3,3]);
+      const sz=Math.max(12,(el.sectionW/12)*PX_PER_FT)+8;
+      ctx.strokeRect(el.x1-sz/2,el.y1-sz/2,sz,sz); ctx.setLineDash([]);
+    }
     const thick={beam:7,plate:5,ridge:7,brace:4}[el.role]||5;
     ctx.strokeStyle=col; ctx.lineWidth=sel?thick+1.5:thick; ctx.lineCap='round'; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
@@ -1226,7 +1233,7 @@ function render2d() {
       const rx=Math.min(ps.x,pe.x),ry=Math.min(ps.y,pe.y),rw=Math.abs(pe.x-ps.x),rh=Math.abs(pe.y-ps.y);
       ctx.strokeRect(rx,ry,rw,rh); ctx.setLineDash([]);
       document.getElementById('st-dim').textContent=`${(rw/PX_PER_FT).toFixed(1)} × ${(rh/PX_PER_FT).toFixed(1)} ft`;
-    } else if(tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'){
+    } else if(tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'){
       ctx.strokeStyle='#C68642'; ctx.lineWidth=tool==='member-brace'?3:5; ctx.lineCap='round'; ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(ps.x,ps.y); ctx.lineTo(pe.x,pe.y); ctx.stroke();
       document.getElementById('st-dim').textContent=`${(Math.hypot(pe.x-ps.x,pe.y-ps.y)/PX_PER_FT).toFixed(1)} ft`;
@@ -1407,15 +1414,63 @@ canvas2d.addEventListener('mousedown',e=>{
   if(e.button===1||(e.button===0&&spaceDown))return; // handled by pan
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='rect-select'){rectSelActive=true;rectSelStart={x,y};rectSelEnd={x,y};return;}
-  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'||tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'||tool==='member-post'){
+  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'||tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-post'){
     if(tool==='member-post'){
-      // Posts are click-to-place — handle here directly so single click works
       saveHistory();
       const newPost={type:'member',role:'post',x1:sp.x,y1:sp.y,x2:sp.x,y2:sp.y,
         sectionW:6,sectionH:6,memberHeight:null,floor:'frame'};
       elements.push(newPost);selected=newPost;multiSel=[];updateProps();render2d();return;
     }
     if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;
+  }
+  if(tool==='member-brace'){
+    // Two-click: first click selects a post, second click selects a beam
+    const hit=hitTest(x,y);
+    if(!braceFirstEl){
+      // First click: must hit a post
+      if(hit&&hit.type==='member'&&hit.role==='post'){
+        braceFirstEl=hit; selected=hit; multiSel=[]; updateProps();
+        document.getElementById('st-hint').textContent='Now click a beam or plate to connect the brace';
+        render2d();
+      } else {
+        document.getElementById('st-hint').textContent='Click a POST first';
+      }
+    } else {
+      // Second click: must hit a horizontal member (beam/plate/ridge)
+      const beamRoles=['beam','plate','ridge'];
+      if(hit&&hit.type==='member'&&beamRoles.includes(hit.role)){
+        const post=braceFirstEl, beam=hit;
+        // Find the beam endpoint nearest to the post
+        const d1=Math.hypot(beam.x1-post.x1,beam.y1-post.y1);
+        const d2=Math.hypot(beam.x2-post.x1,beam.y2-post.y1);
+        const beamEnd=d1<d2?{x:beam.x1,y:beam.y1}:{x:beam.x2,y:beam.y2};
+        // Brace run in canvas px (default 2.5ft)
+        const runPx=2.5*PX_PER_FT;
+        // Direction from post toward beam endpoint
+        const dx=beamEnd.x-post.x1, dy=beamEnd.y-post.y1;
+        const dist=Math.hypot(dx,dy)||1;
+        // Brace 2D: from post centre, offset runPx toward beam
+        const bx2=post.x1+(dx/dist)*runPx, by2=post.y1+(dy/dist)*runPx;
+        const wallH3=parseFloat(document.getElementById('wall-height-input').value)||9;
+        saveHistory();
+        const newBrace={type:'member',role:'brace',
+          x1:post.x1,y1:post.y1,x2:bx2,y2:by2,
+          sectionW:4,sectionH:6,
+          braceRun:2.5,            // horizontal run in ft
+          braceSpring:wallH3*2/3,  // height on post where brace starts (ft)
+          floor:'frame'};
+        elements.push(newBrace);
+        braceFirstEl=null; selected=newBrace; multiSel=[]; updateProps();
+        document.getElementById('st-hint').textContent='Brace placed. Click another post to continue.';
+        render2d(); return;
+      } else {
+        // Clicked something that's not a beam - cancel first selection
+        braceFirstEl=null; selected=null; multiSel=[]; updateProps();
+        document.getElementById('st-hint').textContent='Click a POST first';
+        render2d();
+      }
+    }
+    return;
   }
   const DOOR_TOOLS  =['door','double-door','sliding-door','pocket-door'];
   const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
@@ -1474,7 +1529,7 @@ canvas2d.addEventListener('mouseup',e=>{
         w:rw,h:rh,pitch:6,ridgeDir:'EW',overhang:1,floor:'roof'};
       saveHistory();elements.push(newRoof);switchToSelect(newRoof);
     }
-  } else if(tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'){
+  } else if(tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'){
     if(Math.hypot(sp.x-previewStart.x,sp.y-previewStart.y)>4){
       const role=tool.replace('member-','');
       const defaults={beam:{sW:6,sH:10,elev:null},plate:{sW:6,sH:8,elev:null},ridge:{sW:6,sH:10,elev:null},brace:{sW:4,sH:6,elev:null}};
@@ -1670,7 +1725,7 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Drag to place a knee brace (4×6", 45°, 2.5 ft run)','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Click a POST, then click a BEAM to auto-place a 45° knee brace','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
 const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-timber-btn':'dd-timber','dd-roof-btn':'dd-roof','dd-out-btn':'dd-out'};
 
@@ -1725,6 +1780,7 @@ document.addEventListener('mousedown', e => {
   document.getElementById('st-tool').textContent = `Tool: ${tool}`;
   document.getElementById('st-hint').textContent = hints[tool] || '';
   drawing = false; previewStart = null; previewEnd = null; rectSelStart = null; rectSelEnd = null; rectSelActive = false;
+  braceFirstEl = null;
   closeAllDropdowns();
   render2d();
 });
@@ -2759,8 +2815,14 @@ function rebuild3d(){
           }
           const planAng=Math.atan2(mdz,mdx);
           if(el.role==='brace'){
-            const hRun=hLen, vRise=hRun, totalLen=Math.hypot(hRun,vRise);
-            const yMid=yBase+wallH*(2/3)+vRise/2;
+            // Use stored braceRun/braceSpring if available, else derive from geometry
+            const hRun=(el.braceRun!=null)?el.braceRun:hLen;
+            const springH=(el.braceSpring!=null)?el.braceSpring:wallH*(2/3);
+            const vRise=hRun; // 45° brace: rise = run
+            const totalLen=Math.hypot(hRun,vRise);
+            const yBot=yBase+springH;           // where brace meets post
+            const yTop=yBot+vRise;              // where brace meets beam
+            const yMid=(yBot+yTop)/2;
             const m=new THREE.Mesh(new THREE.BoxGeometry(totalLen,sh,sw),timberMat);
             m.position.set((lx1+lx2)/2,yMid,(lz1+lz2)/2);
             m.rotation.y=-planAng; m.rotation.z=Math.atan2(vRise,hRun);
