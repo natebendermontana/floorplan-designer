@@ -654,11 +654,11 @@ function drawRoof(el, sel) {
 function drawMember(el, sel) {
   const TIMBER_COL='#C68642', TIMBER_SEL='#E8A020', POST_COL='#A0522D', POST_SEL='#C86420';
   const col=sel?(el.role==='post'?POST_SEL:TIMBER_SEL):(el.role==='post'?POST_COL:TIMBER_COL);
-  const alpha=layerVisible.frame?(currentLayer==='frame'?1.0:0.55):0;
+  const alpha=layerVisible.frame?1.0:0;
   if(alpha===0) return;
   ctx.save(); ctx.globalAlpha=alpha;
   if(el.role==='post'){
-    const sz=Math.max(6,(el.sectionW/12)*PX_PER_FT);
+    const sz=Math.max(12,(el.sectionW/12)*PX_PER_FT); // minimum 12px so always visible
     ctx.fillStyle=col; ctx.fillRect(el.x1-sz/2,el.y1-sz/2,sz,sz);
     if(sel){
       ctx.strokeStyle=TIMBER_SEL; ctx.lineWidth=2; ctx.setLineDash([]);
@@ -673,7 +673,7 @@ function drawMember(el, sel) {
       ctx.fillText(el.sectionW+'x'+el.sectionH,el.x1,el.y1);
     }
   } else {
-    const thick={beam:5,plate:4,ridge:5,brace:3}[el.role]||4;
+    const thick={beam:7,plate:5,ridge:7,brace:4}[el.role]||5;
     ctx.strokeStyle=col; ctx.lineWidth=sel?thick+1.5:thick; ctx.lineCap='round'; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(el.x1,el.y1); ctx.lineTo(el.x2,el.y2); ctx.stroke();
     const dx=el.x2-el.x1,dy=el.y2-el.y1,len=Math.hypot(dx,dy);
@@ -1191,7 +1191,8 @@ function render2d() {
   // Draw layers: hidden layers skipped, other floors dimmed, current floor full
   // Roofs drawn on top regardless of active layer
   const roofs    = elements.filter(e => e.type==='roof');
-  const nonRoofs = elements.filter(e => e.type!=='roof');
+  const members  = elements.filter(e => e.type==='member');
+  const nonRoofs = elements.filter(e => e.type!=='roof' && e.type!=='member');
   const otherFloor = nonRoofs.filter(e => layerVisible[(e.floor||0)] && (e.floor||0)!==currentFloor);
   const thisFloor  = nonRoofs.filter(e => layerVisible[(e.floor||0)] && (e.floor||0)===currentFloor);
   for (const el of [...otherFloor, ...thisFloor]) {
@@ -1206,6 +1207,9 @@ function render2d() {
     for (const el of roofs) {
       drawRoof(el, (el===selected)||multiSel.includes(el));
     }
+  }
+  for (const el of members) {
+    drawMember(el, (el===selected)||multiSel.includes(el));
   }
   if (drawing && previewStart && previewEnd) {
     ctx.globalAlpha=0.5;
@@ -1478,7 +1482,16 @@ canvas2d.addEventListener('mousedown',e=>{
   if(e.button===1||(e.button===0&&spaceDown))return; // handled by pan
   const{x,y}=getPos(e), sp=snapPt(x,y);
   if(tool==='rect-select'){rectSelActive=true;rectSelStart={x,y};rectSelEnd={x,y};return;}
-  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'||tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'){if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;}
+  if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'||tool==='room'||tool==='roof-flat'||tool==='roof-shed'||tool==='roof-gable'||tool==='roof-hip'||tool==='member-beam'||tool==='member-plate'||tool==='member-ridge'||tool==='member-brace'||tool==='member-post'){
+    if(tool==='member-post'){
+      // Posts are click-to-place — handle here directly so single click works
+      saveHistory();
+      const newPost={type:'member',role:'post',x1:sp.x,y1:sp.y,x2:sp.x,y2:sp.y,
+        sectionW:6,sectionH:6,memberHeight:null,floor:'frame'};
+      elements.push(newPost);selected=newPost;multiSel=[];updateProps();render2d();return;
+    }
+    if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;
+  }
   const DOOR_TOOLS  =['door','double-door','sliding-door','pocket-door'];
   const WIN_TOOLS   =['window','picture-window','bay-window','skylight'];
   if(DOOR_TOOLS.includes(tool)){
@@ -1495,11 +1508,7 @@ canvas2d.addEventListener('mousedown',e=>{
     const d=FDEFS[tool];saveHistory();
     const newFur={type:'furniture',ftype:tool,x:sp.x,y:sp.y,fw:d.w,fh:d.h,angle:0,floor:currentFloor};
     elements.push(newFur);switchToSelect(newFur);render2d();return;
-  } else if(tool==='member-post'){
-    saveHistory();
-    const newPost={type:'member',role:'post',x1:sp.x,y1:sp.y,x2:sp.x,y2:sp.y,
-      sectionW:6,sectionH:6,memberHeight:null,floor:'frame'};
-    elements.push(newPost);switchToSelect(newPost);render2d();return;
+
   }
   if(tool==='select'){
     if(selected){const h=hitHandle(selected,x,y);if(h){activeHandle={type:h.type,role:h.role,el:selected,origin:JSON.parse(JSON.stringify(selected)),mouseStart:{x,y}};return;}}
@@ -1555,7 +1564,7 @@ canvas2d.addEventListener('mouseup',e=>{
       const s45=snap45(previewStart.x,previewStart.y,sp.x,sp.y);
       const newMember={type:'member',role,x1:previewStart.x,y1:previewStart.y,
         x2:s45.x2,y2:s45.y2,sectionW:d.sW,sectionH:d.sH,memberElev:d.elev,floor:'frame'};
-      saveHistory();elements.push(newMember);switchToSelect(newMember);
+      saveHistory();elements.push(newMember);selected=newMember;multiSel=[];updateProps();
     }
   }
   drawing=false;previewStart=null;previewEnd=null;
