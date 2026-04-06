@@ -259,23 +259,22 @@ let currentLayer  = 0;          // active drawing layer: 0, 1, or 'roof'
 let currentFloor  = 0;          // floor for non-roof placement (0 or 1)
 const layerVisible = {0:true, 1:true, roof:true, frame:true};
 
+// Parse a data-layer or data-vis attribute value to the correct key type
+const layerKey = v => (v==='roof'||v==='frame') ? v : +v;
+
 function setLayer(layer) {
   currentLayer = layer;
   currentFloor = (layer === 'roof' || layer === 'frame') ? 0 : +layer;
-  // Sync draw-layer buttons
   document.querySelectorAll('.layer-btn').forEach(b => {
-    const bl = (b.dataset.layer === 'roof') ? 'roof' : +b.dataset.layer;
-    b.classList.toggle('active', bl === layer);
+    b.classList.toggle('active', layerKey(b.dataset.layer) === layer);
   });
   selected = null; multiSel = []; updateProps(); render2d();
 }
 
 function toggleLayerVisible(layer) {
   layerVisible[layer] = !layerVisible[layer];
-  // Sync 2D vis buttons
   document.querySelectorAll('.vis-btn').forEach(b => {
-    const bl = (b.dataset.vis === 'roof') ? 'roof' : +b.dataset.vis;
-    b.classList.toggle('active', !!layerVisible[bl]);
+    b.classList.toggle('active', !!layerVisible[layerKey(b.dataset.vis)]);
   });
   syncVis3dBtns();
   if (typeof applyFloorVisibility === 'function') applyFloorVisibility();
@@ -423,15 +422,13 @@ const FLOOR_NAMES = ['Ground floor', 'Upper floor'];
 // Draw-layer buttons: click = set active drawing layer
 document.querySelectorAll('.layer-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const layer = (btn.dataset.layer === 'roof') ? 'roof' : +btn.dataset.layer;
-    setLayer(layer);
+    setLayer(layerKey(btn.dataset.layer));
   });
 });
 // Visibility buttons: click = toggle layer visibility
 document.querySelectorAll('.vis-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const layer = (btn.dataset.vis === 'roof') ? 'roof' : +btn.dataset.vis;
-    toggleLayerVisible(layer);
+    toggleLayerVisible(layerKey(btn.dataset.vis));
   });
 });
 
