@@ -1275,85 +1275,13 @@ function hitTest(x,y) {
     } else if(el.type==='window'||el.type==='door'){
       if(Math.hypot(x-el.x,y-el.y)<35)return el;
 
+    } else if(el.type==='member'&&el.role==='post'){
+      const psz=Math.max(12,(el.sectionW/12)*PX_PER_FT)+6;
+      if(Math.abs(x-el.x1)<psz/2&&Math.abs(y-el.y1)<psz/2)return el;
     } else if(el.type==='member'){
-      // ── Timber frame member ──────────────────────────────────────
-      const sw=el.sectionW/12, sh=el.sectionH/12; // inches → feet
-      const timberMat=new THREE.MeshLambertMaterial({color:0xC68642});
-      const postMat  =new THREE.MeshLambertMaterial({color:0xA0522D});
-
-      // addFM: tag as frame mesh
-      const addFM=(mesh)=>{
-        mesh.userData.fp=true; mesh.userData.isFrame=true;
-        mesh.visible=!!layerVisible.frame; scene3.add(mesh); return mesh;
-      };
-
-      if(el.role==='post'){
-        // Vertical box from yBase to yBase+memberHeight (default wallH)
-        const pH = el.memberHeight!=null ? el.memberHeight : wallH;
-        const px=el.x1/PX_PER_FT-cx, pz=el.y1/PX_PER_FT-cz;
-        const geo=new THREE.BoxGeometry(sw, pH, sh);
-        const m=new THREE.Mesh(geo, postMat);
-        m.position.set(px, yBase+pH/2, pz);
-        m.castShadow=true; addFM(m);
-        // Base plate (thin slab under post)
-        const bp=new THREE.Mesh(new THREE.BoxGeometry(sw+0.1,0.08,sh+0.1),postMat);
-        bp.position.set(px, yBase+0.04, pz); addFM(bp);
-
-      } else {
-        // Line member: beam, plate, ridge, brace
-        const x1=el.x1/PX_PER_FT-cx, z1=el.y1/PX_PER_FT-cz;
-        const x2=el.x2/PX_PER_FT-cx, z2=el.y2/PX_PER_FT-cz;
-        const dx=x2-x1, dz=z2-z1;
-        const hLen=Math.hypot(dx,dz); // horizontal length
-        if(hLen < 0.01) { /* skip zero-length */ } else {
-
-          // Determine elevation
-          let mElev = el.memberElev!=null ? el.memberElev : wallH;
-          if(el.role==='ridge'){
-            // Auto ridge height: find a roof element whose footprint covers this member
-            const rx=(el.x1+el.x2)/2, rz=(el.y1+el.y2)/2;
-            const under=elements.find(r=>r.type==='roof'&&
-              r.x/PX_PER_FT-cx<rx&&(r.x+r.w)/PX_PER_FT-cx>rx&&
-              r.y/PX_PER_FT-cz<rz&&(r.y+r.h)/PX_PER_FT-cz>rz);
-            if(under){
-              const rw3=under.w/PX_PER_FT, rh3=under.h/PX_PER_FT;
-              const useEW=rw3>=rh3;
-              const span=useEW?rh3:rw3;
-              mElev=wallH+(span/2)*(under.pitch??6)/12;
-            }
-          }
-
-          if(el.role==='brace'){
-            // Brace: diagonal in the vertical plane along the member's plan direction
-            // Rises 45° from yBase+braceStart up to beam elevation
-            const braceStart=wallH*(2/3); // spring point at 2/3 up post
-            const hRun=hLen; // horizontal run = drawn length
-            const vRise=hRun; // 45° so vertical rise = horizontal run
-            const totalLen=Math.hypot(hRun,vRise);
-            const yMid=yBase+braceStart+vRise/2;
-            const geo=new THREE.BoxGeometry(totalLen, sh, sw);
-            const m=new THREE.Mesh(geo, timberMat);
-            // Position at midpoint
-            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
-            // Rotate in plan (around Y axis)
-            const planAng=Math.atan2(dz, dx);
-            m.rotation.y=-planAng;
-            // Tilt up (around Z in local space = around the perpendicular of the plan direction)
-            m.rotation.z=Math.atan2(vRise, hRun);
-            m.castShadow=true; addFM(m);
-          } else {
-            // Beam / plate / ridge: horizontal box along plan direction at mElev
-            const yMid=yBase+mElev-sh/2; // bottom of beam at mElev
-            const geo=new THREE.BoxGeometry(hLen, sh, sw);
-            const m=new THREE.Mesh(geo, timberMat);
-            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
-            const planAng=Math.atan2(dz, dx);
-            m.rotation.y=-planAng;
-            m.castShadow=true; addFM(m);
-          }
-        }
-      }
-
+      const mdx=el.x2-el.x1,mdy=el.y2-el.y1,mlen=Math.hypot(mdx,mdy);
+      if(mlen>0){const mt=Math.max(0,Math.min(1,((x-el.x1)*mdx+(y-el.y1)*mdy)/(mlen*mlen)));
+      if(Math.hypot(x-el.x1-mt*mdx,y-el.y1-mt*mdy)<10)return el;}
     } else if(el.type==='furniture'){
       const ang=-(el.angle||0),pw=el.fw*PX_PER_FT/2,ph=el.fh*PX_PER_FT/2;
       const lx=(x-el.x)*Math.cos(ang)-(y-el.y)*Math.sin(ang);
@@ -2804,84 +2732,49 @@ function rebuild3d(){
         }
       }
     } else if(el.type==='member'){
-      // ── Timber frame member ──────────────────────────────────────
-      const sw=el.sectionW/12, sh=el.sectionH/12; // inches → feet
+      // ── Timber frame member 3D rendering ────────────────────────
+      const sw=el.sectionW/12, sh=el.sectionH/12; // section inches → feet
       const timberMat=new THREE.MeshLambertMaterial({color:0xC68642});
       const postMat  =new THREE.MeshLambertMaterial({color:0xA0522D});
-
-      // addFM: tag as frame mesh
       const addFM=(mesh)=>{
         mesh.userData.fp=true; mesh.userData.isFrame=true;
         mesh.visible=!!layerVisible.frame; scene3.add(mesh); return mesh;
       };
-
       if(el.role==='post'){
-        // Vertical box from yBase to yBase+memberHeight (default wallH)
-        const pH = el.memberHeight!=null ? el.memberHeight : wallH;
+        const pH=el.memberHeight!=null?el.memberHeight:wallH;
         const px=el.x1/PX_PER_FT-cx, pz=el.y1/PX_PER_FT-cz;
-        const geo=new THREE.BoxGeometry(sw, pH, sh);
-        const m=new THREE.Mesh(geo, postMat);
-        m.position.set(px, yBase+pH/2, pz);
-        m.castShadow=true; addFM(m);
-        // Base plate (thin slab under post)
+        const m=new THREE.Mesh(new THREE.BoxGeometry(sw,pH,sh),postMat);
+        m.position.set(px,yBase+pH/2,pz); m.castShadow=true; addFM(m);
         const bp=new THREE.Mesh(new THREE.BoxGeometry(sw+0.1,0.08,sh+0.1),postMat);
-        bp.position.set(px, yBase+0.04, pz); addFM(bp);
-
+        bp.position.set(px,yBase+0.04,pz); addFM(bp);
       } else {
-        // Line member: beam, plate, ridge, brace
-        const x1=el.x1/PX_PER_FT-cx, z1=el.y1/PX_PER_FT-cz;
-        const x2=el.x2/PX_PER_FT-cx, z2=el.y2/PX_PER_FT-cz;
-        const dx=x2-x1, dz=z2-z1;
-        const hLen=Math.hypot(dx,dz); // horizontal length
-        if(hLen < 0.01) { /* skip zero-length */ } else {
-
-          // Determine elevation
-          let mElev = el.memberElev!=null ? el.memberElev : wallH;
+        const lx1=el.x1/PX_PER_FT-cx, lz1=el.y1/PX_PER_FT-cz;
+        const lx2=el.x2/PX_PER_FT-cx, lz2=el.y2/PX_PER_FT-cz;
+        const mdx=lx2-lx1, mdz=lz2-lz1, hLen=Math.hypot(mdx,mdz);
+        if(hLen>=0.01){
+          let mElev=el.memberElev!=null?el.memberElev:wallH;
           if(el.role==='ridge'){
-            // Auto ridge height: find a roof element whose footprint covers this member
-            const rx=(el.x1+el.x2)/2, rz=(el.y1+el.y2)/2;
+            const rmx=(el.x1+el.x2)/2, rmz=(el.y1+el.y2)/2;
             const under=elements.find(r=>r.type==='roof'&&
-              r.x/PX_PER_FT-cx<rx&&(r.x+r.w)/PX_PER_FT-cx>rx&&
-              r.y/PX_PER_FT-cz<rz&&(r.y+r.h)/PX_PER_FT-cz>rz);
-            if(under){
-              const rw3=under.w/PX_PER_FT, rh3=under.h/PX_PER_FT;
-              const useEW=rw3>=rh3;
-              const span=useEW?rh3:rw3;
-              mElev=wallH+(span/2)*(under.pitch??6)/12;
-            }
+              r.x/PX_PER_FT-cx<rmx&&(r.x+r.w)/PX_PER_FT-cx>rmx&&
+              r.y/PX_PER_FT-cz<rmz&&(r.y+r.h)/PX_PER_FT-cz>rmz);
+            if(under){const span=Math.min(under.w,under.h)/PX_PER_FT;mElev=wallH+(span/2)*(under.pitch??6)/12;}
           }
-
+          const planAng=Math.atan2(mdz,mdx);
           if(el.role==='brace'){
-            // Brace: diagonal in the vertical plane along the member's plan direction
-            // Rises 45° from yBase+braceStart up to beam elevation
-            const braceStart=wallH*(2/3); // spring point at 2/3 up post
-            const hRun=hLen; // horizontal run = drawn length
-            const vRise=hRun; // 45° so vertical rise = horizontal run
-            const totalLen=Math.hypot(hRun,vRise);
-            const yMid=yBase+braceStart+vRise/2;
-            const geo=new THREE.BoxGeometry(totalLen, sh, sw);
-            const m=new THREE.Mesh(geo, timberMat);
-            // Position at midpoint
-            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
-            // Rotate in plan (around Y axis)
-            const planAng=Math.atan2(dz, dx);
-            m.rotation.y=-planAng;
-            // Tilt up (around Z in local space = around the perpendicular of the plan direction)
-            m.rotation.z=Math.atan2(vRise, hRun);
+            const hRun=hLen, vRise=hRun, totalLen=Math.hypot(hRun,vRise);
+            const yMid=yBase+wallH*(2/3)+vRise/2;
+            const m=new THREE.Mesh(new THREE.BoxGeometry(totalLen,sh,sw),timberMat);
+            m.position.set((lx1+lx2)/2,yMid,(lz1+lz2)/2);
+            m.rotation.y=-planAng; m.rotation.z=Math.atan2(vRise,hRun);
             m.castShadow=true; addFM(m);
           } else {
-            // Beam / plate / ridge: horizontal box along plan direction at mElev
-            const yMid=yBase+mElev-sh/2; // bottom of beam at mElev
-            const geo=new THREE.BoxGeometry(hLen, sh, sw);
-            const m=new THREE.Mesh(geo, timberMat);
-            m.position.set((x1+x2)/2, yMid, (z1+z2)/2);
-            const planAng=Math.atan2(dz, dx);
-            m.rotation.y=-planAng;
-            m.castShadow=true; addFM(m);
+            const m=new THREE.Mesh(new THREE.BoxGeometry(hLen,sh,sw),timberMat);
+            m.position.set((lx1+lx2)/2,yBase+mElev-sh/2,(lz1+lz2)/2);
+            m.rotation.y=-planAng; m.castShadow=true; addFM(m);
           }
         }
       }
-
     } else if(el.type==='furniture'){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
       const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
