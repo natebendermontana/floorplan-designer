@@ -1424,72 +1424,76 @@ canvas2d.addEventListener('mousedown',e=>{
     if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;
   }
   if(tool==='member-brace'){
-    // Two-click: first click picks nearest post, second click picks nearest beam
-    const SNAP_R = Math.max(30, 3*PX_PER_FT); // generous snap radius
-    const members = elements.filter(e=>e.type==='member');
-    const nearestPost = members
+    // Two-click brace: click 1 = post, click 2 = beam
+    // Uses nearest-member search — no precise clicking needed
+    const SNAP_R = Math.max(40, 4*PX_PER_FT);
+    const allMembers = elements.filter(e=>e.type==='member');
+
+    // Find nearest post to click point
+    const nearPost = allMembers
       .filter(e=>e.role==='post')
       .map(e=>({e, d:Math.hypot(x-e.x1, y-e.y1)}))
       .sort((a,b)=>a.d-b.d)[0];
-    const nearestBeam = members
-      .filter(e=>['beam','plate','ridge'].includes(e.role))
+
+    // Find nearest horizontal member (any distance — second click can be anywhere on it)
+    const nearBeam = allMembers
+      .filter(e=>e.role==='beam'||e.role==='plate'||e.role==='ridge')
       .map(e=>{
-        const dx=e.x2-e.x1, dy=e.y2-e.y1, len=Math.hypot(dx,dy)||1;
-        const t=Math.max(0,Math.min(1,((x-e.x1)*dx+(y-e.y1)*dy)/(len*len)));
-        return {e, d:Math.hypot(x-e.x1-t*dx, y-e.y1-t*dy)};
+        const bdx=e.x2-e.x1, bdy=e.y2-e.y1, blen=Math.hypot(bdx,bdy)||1;
+        const t=Math.max(0,Math.min(1,((x-e.x1)*bdx+(y-e.y1)*bdy)/(blen*blen)));
+        return {e, d:Math.hypot(x-e.x1-t*bdx, y-e.y1-t*bdy)};
       })
       .sort((a,b)=>a.d-b.d)[0];
 
     if(!braceFirstEl){
-      // First click: snap to nearest post within radius
-      if(nearestPost && nearestPost.d < SNAP_R){
-        braceFirstEl=nearestPost.e;
-        selected=braceFirstEl; multiSel=[]; updateProps();
-        document.getElementById('st-hint').textContent=
-          'POST selected ✓ — now click a beam or plate';
+      // CLICK 1: pick a post
+      if(nearPost && nearPost.d < SNAP_R){
+        braceFirstEl = nearPost.e;
+        selected = braceFirstEl; multiSel=[]; updateProps();
+        document.getElementById('st-hint').textContent =
+          'Post selected ✓  —  now click any beam or plate';
         render2d();
       } else {
-        document.getElementById('st-hint').textContent=
-          'Click near a POST to start the brace';
+        document.getElementById('st-hint').textContent =
+          'No post nearby — click closer to a post';
       }
     } else {
-      // Second click: snap to nearest beam within radius
-      if(nearestBeam && nearestBeam.d < SNAP_R){
-        const post=braceFirstEl, beam=nearestBeam.e;
-        // Nearest point on beam to post centre
+      // CLICK 2: pick a beam — use nearest beam regardless of distance
+      if(nearBeam){
+        const post = braceFirstEl, beam = nearBeam.e;
+        // Closest point on beam line to post centre
         const bdx=beam.x2-beam.x1, bdy=beam.y2-beam.y1, blen=Math.hypot(bdx,bdy)||1;
-        const bt=Math.max(0,Math.min(1,((post.x1-beam.x1)*bdx+(post.y1-beam.y1)*bdy)/(blen*blen)));
-        const nearPt={x:beam.x1+bt*bdx, y:beam.y1+bt*bdy};
-        // Direction from post toward nearest beam point (plan)
-        const dx=nearPt.x-post.x1, dy=nearPt.y-post.y1;
-        const dist=Math.hypot(dx,dy)||1;
-        const runPx=2.5*PX_PER_FT; // 2.5 ft run
+        const bt=Math.max(0,Math.min(1,
+          ((post.x1-beam.x1)*bdx+(post.y1-beam.y1)*bdy)/(blen*blen)));
+        const nearPt = {x:beam.x1+bt*bdx, y:beam.y1+bt*bdy};
+        // Plan direction from post toward beam
+        const pdx=nearPt.x-post.x1, pdy=nearPt.y-post.y1;
+        const plen=Math.hypot(pdx,pdy)||1;
+        const runPx=2.5*PX_PER_FT;
         const wallH3=parseFloat(document.getElementById('wall-height-input').value)||9;
         saveHistory();
         const newBrace={type:'member',role:'brace',
           x1:post.x1, y1:post.y1,
-          x2:post.x1+(dx/dist)*runPx, y2:post.y1+(dy/dist)*runPx,
-          sectionW:4, sectionH:6,
-          braceRun:2.5,
-          braceSpring:wallH3*(2/3),
+          x2:post.x1+(pdx/plen)*runPx, y2:post.y1+(pdy/plen)*runPx,
+          sectionW:4, sectionH:6, braceRun:2.5, braceSpring:wallH3*(2/3),
           floor:'frame'};
         elements.push(newBrace);
         braceFirstEl=null; selected=newBrace; multiSel=[]; updateProps();
-        document.getElementById('st-hint').textContent=
-          'Brace placed ✓ — click another post to continue';
+        document.getElementById('st-hint').textContent =
+          'Brace placed ✓  —  click another post to continue';
         render2d(); return;
-      } else if(nearestPost && nearestPost.d < SNAP_R && nearestPost.e!==braceFirstEl){
-        // Clicked near a different post - re-pick it as first
-        braceFirstEl=nearestPost.e;
-        selected=braceFirstEl; multiSel=[]; updateProps();
-        document.getElementById('st-hint').textContent=
-          'POST selected ✓ — now click a beam or plate';
+      } else if(nearPost && nearPost.d < SNAP_R && nearPost.e !== braceFirstEl){
+        // Re-pick a different post
+        braceFirstEl = nearPost.e;
+        selected = braceFirstEl; multiSel=[]; updateProps();
+        document.getElementById('st-hint').textContent =
+          'Post selected ✓  —  now click any beam or plate';
         render2d();
       } else {
-        // Clicked empty space - cancel
+        // Cancel
         braceFirstEl=null; selected=null; multiSel=[]; updateProps();
-        document.getElementById('st-hint').textContent=
-          'Cancelled. Click near a POST to start.';
+        document.getElementById('st-hint').textContent =
+          'Cancelled — click a post to start again';
         render2d();
       }
     }
