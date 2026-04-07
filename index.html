@@ -203,7 +203,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
       <div id="panel-3d-resizer"></div>
       <div id="panel-3d-header">
         <span class="ph-title">3D Preview</span>
-        <span class="ph-hint">Drag to orbit · scroll to zoom</span>
+        <span class="ph-hint">Drag to orbit · right-drag to pan · scroll to zoom · double-click to fit</span>
         <span style="font-size:9px;color:rgba(255,255,255,0.4)">Show</span>
         <button class="ph-btn" id="vis-fl-0" title="Toggle ground floor">G</button>
         <button class="ph-btn" id="vis-fl-1" title="Toggle upper floor">U</button>
@@ -450,6 +450,18 @@ function getHandles(el) {
   } else if (el.type === 'wall') {
     handles.push({type:'resize',role:'p1',cx:el.x1,cy:el.y1});
     handles.push({type:'resize',role:'p2',cx:el.x2,cy:el.y2});
+  } else if (el.type === 'member' && el.role === 'post') {
+    const psz=Math.max(8,(el.sectionW/12)*PX_PER_FT);
+    [{role:'nw',cx:el.x1-psz/2,cy:el.y1-psz/2},{role:'ne',cx:el.x1+psz/2,cy:el.y1-psz/2},
+     {role:'se',cx:el.x1+psz/2,cy:el.y1+psz/2},{role:'sw',cx:el.x1-psz/2,cy:el.y1+psz/2}
+    ].forEach(p=>handles.push({type:'resize',...p}));
+    handles.push({type:'rotate',role:'rot',cx:el.x1+psz/2+ROT_DIST*0.7,cy:el.y1-psz/2-ROT_DIST*0.7});
+  } else if (el.type === 'member' && (el.role==='beam'||el.role==='plate'||el.role==='ridge')) {
+    const mlen=Math.hypot(el.x2-el.x1,el.y2-el.y1)||1;
+    const nx=-(el.y2-el.y1)/mlen*ROT_DIST, ny=(el.x2-el.x1)/mlen*ROT_DIST;
+    handles.push({type:'resize',role:'p1',cx:el.x1,cy:el.y1});
+    handles.push({type:'resize',role:'p2',cx:el.x2,cy:el.y2});
+    handles.push({type:'rotate',role:'rot',cx:(el.x1+el.x2)/2+nx,cy:(el.y1+el.y2)/2+ny});
   } else if (el.type === 'furniture') {
     const pw=el.fw*PX_PER_FT, ph=el.fh*PX_PER_FT, ang=el.angle||0;
     const rot=(lx,ly)=>({cx:el.x+lx*Math.cos(ang)-ly*Math.sin(ang),cy:el.y+lx*Math.sin(ang)+ly*Math.cos(ang)});
@@ -491,6 +503,12 @@ function applyResize(el, role, mx, my, origin, mouseStart) {
   } else if (el.type==='wall') {
     if(role==='p1'){const gs=geometricSnap(snap(origin.x1+dx),snap(origin.y1+dy),el);el.x1=gs.x;el.y1=gs.y;}
     if(role==='p2'){const gs=geometricSnap(snap(origin.x2+dx),snap(origin.y2+dy),el);el.x2=gs.x;el.y2=gs.y;}
+  } else if (el.type==='member'&&el.role==='post') {
+    const gs=geometricSnap(snap(origin.x1+dx),snap(origin.y1+dy),el);
+    el.x1=gs.x; el.y1=gs.y; el.x2=gs.x; el.y2=gs.y;
+  } else if (el.type==='member') {
+    if(role==='p1'){const gs=geometricSnap(snap(origin.x1+dx),snap(origin.y1+dy),el);el.x1=gs.x;el.y1=gs.y;}
+    if(role==='p2'){const gs=geometricSnap(snap(origin.x2+dx),snap(origin.y2+dy),el);el.x2=gs.x;el.y2=gs.y;}
   } else if (el.type==='furniture') {
     const ang=origin.angle||0;
     const ldx=dx*Math.cos(ang)+dy*Math.sin(ang), ldy=-dx*Math.sin(ang)+dy*Math.cos(ang);
@@ -520,12 +538,14 @@ function applyResize(el, role, mx, my, origin, mouseStart) {
 function applyRotate(el, mx, my, origin) {
   const c=elCenter(origin);
   let angle=Math.round(Math.atan2(my-c.y,mx-c.x)/(Math.PI/12))*(Math.PI/12);
-  if(el.type==='wall'){
+  if(el.type==='wall'||(el.type==='member'&&el.role!=='post'&&el.role!=='brace')){
     const len=Math.hypot(origin.x2-origin.x1,origin.y2-origin.y1);
     const cx=(origin.x1+origin.x2)/2, cy=(origin.y1+origin.y2)/2;
     el.x1=snap(cx-Math.cos(angle)*len/2); el.y1=snap(cy-Math.sin(angle)*len/2);
     el.x2=snap(cx+Math.cos(angle)*len/2); el.y2=snap(cy+Math.sin(angle)*len/2);
-  } else if(el.type!=='room') {
+  } else if(el.type==='member'&&el.role==='post'){
+    el.angle=angle;
+  } else if(el.type!=='room'&&el.type!=='roof') {
     el.angle=angle;
   }
 }
@@ -670,6 +690,7 @@ function drawMember(el, sel) {
       ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(el.sectionW+'x'+el.sectionH,el.x1,el.y1);
     }
+    if(sel) drawHandles(el);
   } else {
     // Highlight first-selected post for brace tool
     if(el===braceFirstEl){
@@ -1451,11 +1472,11 @@ canvas2d.addEventListener('mousedown',e=>{
         braceFirstEl = nearPost.e;
         selected = braceFirstEl; multiSel=[]; updateProps();
         document.getElementById('st-hint').textContent =
-          'Post selected ✓  —  now click any beam or plate';
+          'Brace: post selected — click any beam or plate to connect';
         render2d();
       } else {
         document.getElementById('st-hint').textContent =
-          'No post nearby — click closer to a post';
+          'Brace tool: click near a post to start';
       }
     } else {
       // CLICK 2: pick a beam — use nearest beam regardless of distance
@@ -1480,20 +1501,20 @@ canvas2d.addEventListener('mousedown',e=>{
         elements.push(newBrace);
         braceFirstEl=null; selected=newBrace; multiSel=[]; updateProps();
         document.getElementById('st-hint').textContent =
-          'Brace placed ✓  —  click another post to continue';
+          'Brace placed! Click another post to add more braces';
         render2d(); return;
       } else if(nearPost && nearPost.d < SNAP_R && nearPost.e !== braceFirstEl){
         // Re-pick a different post
         braceFirstEl = nearPost.e;
         selected = braceFirstEl; multiSel=[]; updateProps();
         document.getElementById('st-hint').textContent =
-          'Post selected ✓  —  now click any beam or plate';
+          'Brace: post selected — click any beam or plate to connect';
         render2d();
       } else {
         // Cancel
         braceFirstEl=null; selected=null; multiSel=[]; updateProps();
         document.getElementById('st-hint').textContent =
-          'Cancelled — click a post to start again';
+          'Brace tool: click near a post to start';
         render2d();
       }
     }
@@ -1752,7 +1773,7 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Click a POST, then click a BEAM to auto-place a 45° knee brace','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Step 1: click near a POST → Step 2: click any BEAM to place 45° brace','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
 const DD_MAP = {'dd-draw-btn':'dd-draw','dd-open-btn':'dd-open','dd-furn-btn':'dd-furn','dd-timber-btn':'dd-timber','dd-roof-btn':'dd-roof','dd-out-btn':'dd-out'};
 
@@ -2113,19 +2134,19 @@ document.addEventListener('keydown',e=>{
     document.getElementById('panel-3d').classList.remove('fullscreen');
     document.getElementById('btn-3d-fullscreen').innerHTML='&#x26F6;';
   }
-  // Arrow keys: pan the 3D camera target when panel is open and no input is focused
+  // 3D keyboard navigation when panel is open
   if(!panel3dOpen) return;
   if(document.activeElement&&['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
-  const PAN=0.6;
-  // Camera position = target + r*(sin(phi)*sin(theta), cos(phi), sin(phi)*cos(theta))
-  // Forward (cam→target projected on XZ) = (-sin(theta), 0, -cos(theta))
-  // Right = perpendicular on XZ = (-cos(theta), 0, sin(theta))
+  const PAN = spherical.radius * 0.05; // pan speed scales with zoom level
   const sinT=Math.sin(spherical.theta), cosT=Math.cos(spherical.theta);
   if(e.key==='ArrowLeft')  { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; e.preventDefault(); }
   if(e.key==='ArrowRight') { spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; e.preventDefault(); }
   if(e.key==='ArrowUp')    { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; e.preventDefault(); }
   if(e.key==='ArrowDown')  { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; e.preventDefault(); }
-  if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown') updateCam3();
+  if(e.key==='+' || e.key==='=') { spherical.radius=Math.max(3,spherical.radius/1.15); e.preventDefault(); }
+  if(e.key==='-')                { spherical.radius=Math.min(200,spherical.radius*1.15); e.preventDefault(); }
+  if(e.key==='f' || e.key==='F') { fitView3d(); e.preventDefault(); }
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='+'||e.key==='-'||e.key==='='||e.key==='f'||e.key==='F') updateCam3();
 },true);
 
 // Drag resizer
@@ -2161,35 +2182,152 @@ function initThree(){
   if(threeReady)return; threeReady=true;
   const c=document.getElementById('three-canvas');
   renderer3=new THREE.WebGLRenderer({canvas:c,antialias:true});
-  renderer3.setPixelRatio(devicePixelRatio);
+  renderer3.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer3.setClearColor(0x12121f,1);
   renderer3.shadowMap.enabled=true;
   scene3=new THREE.Scene();
-  scene3.fog=new THREE.Fog(0x12121f,60,200);
+  scene3.fog=new THREE.Fog(0x12121f,80,250);
   camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
   updateCam3();
-  scene3.add(new THREE.AmbientLight(0xffffff,0.5));
+  scene3.add(new THREE.AmbientLight(0xffffff,0.55));
   const sun=new THREE.DirectionalLight(0xfff8e8,0.95);
   sun.position.set(25,45,20); sun.castShadow=true; scene3.add(sun);
-  const fill=new THREE.DirectionalLight(0xc8d8ff,0.28);
+  const fill=new THREE.DirectionalLight(0xc8d8ff,0.3);
   fill.position.set(-18,12,-12); scene3.add(fill);
-  let orbiting=false,lastM={x:0,y:0};
-  c.addEventListener('mousedown',e=>{orbiting=true;lastM={x:e.clientX,y:e.clientY};e.stopPropagation();});
-  window.addEventListener('mouseup',()=>orbiting=false);
-  window.addEventListener('mousemove',e=>{
-    if(!orbiting)return;
-    spherical.theta-=(e.clientX-lastM.x)*0.008;
-    spherical.phi=Math.max(0.12,Math.min(Math.PI/2-0.04,spherical.phi-(e.clientY-lastM.y)*0.008));
-    lastM={x:e.clientX,y:e.clientY};updateCam3();
+
+  // ── Navigation state ──────────────────────────────────────────
+  // vel* = momentum velocity (decays each frame)
+  let navState = {
+    dragging: false, panning: false,
+    lastX:0, lastY:0,
+    velTheta:0, velPhi:0,   // orbit momentum
+    velTx:0, velTz:0,       // pan momentum
+  };
+
+  // ── Mouse navigation ──────────────────────────────────────────
+  c.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    navState.lastX = e.clientX; navState.lastY = e.clientY;
+    // Right-click or middle-click = pan; left-click = orbit
+    if(e.button === 2 || e.button === 1){
+      navState.panning  = true; navState.dragging = false;
+      e.preventDefault();
+    } else if(e.button === 0){
+      navState.dragging = true; navState.panning  = false;
+    }
+    // Kill any existing momentum on new drag
+    navState.velTheta=0; navState.velPhi=0; navState.velTx=0; navState.velTz=0;
   });
-  c.addEventListener('wheel',e=>{spherical.radius=Math.max(4,Math.min(130,spherical.radius+e.deltaY*0.05));updateCam3();e.preventDefault();},{passive:false});
+
+  window.addEventListener('mouseup', () => {
+    navState.dragging = false; navState.panning = false;
+  });
+
+  window.addEventListener('mousemove', e => {
+    if(!navState.dragging && !navState.panning) return;
+    const dx = e.clientX - navState.lastX;
+    const dy = e.clientY - navState.lastY;
+    navState.lastX = e.clientX; navState.lastY = e.clientY;
+
+    if(navState.dragging){
+      // Orbit — speed scales with distance so it feels consistent
+      const speed = 0.005 * Math.max(0.3, spherical.radius / 30);
+      navState.velTheta -= dx * speed;
+      navState.velPhi   -= dy * speed;
+    } else if(navState.panning){
+      // Pan in the camera's XZ plane
+      const panSpeed = 0.012 * spherical.radius / 30;
+      // Right vector and up-projected forward in world XZ
+      const cosT=Math.cos(spherical.theta), sinT=Math.sin(spherical.theta);
+      navState.velTx += (-dx * cosT - dy * sinT * 0.3) * panSpeed;
+      navState.velTz += ( dx * sinT - dy * cosT * 0.3) * panSpeed;
+    }
+    updateCam3();
+  });
+
+  // Scroll = exponential zoom (feels linear regardless of distance)
+  c.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 1.12 : 1/1.12;
+    // For trackpads deltaMode=0 gives small values; mice give ~100
+    const steps = Math.abs(e.deltaY) > 50 ? 1 : Math.abs(e.deltaY)/50;
+    spherical.radius = Math.max(3, Math.min(200, spherical.radius * Math.pow(factor, steps)));
+    updateCam3();
+  }, {passive:false});
+
+  // Right-click context menu suppression
+  c.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Double-click: fit view
+  c.addEventListener('dblclick', () => fitView3d());
+
+  // Touch: one finger = orbit, two fingers = pinch-zoom + pan
+  let touches = {};
+  let lastPinchDist = 0;
+  c.addEventListener('touchstart', e => {
+    e.preventDefault();
+    navState.velTheta=0; navState.velPhi=0;
+    Array.from(e.touches).forEach(t => touches[t.identifier]={x:t.clientX,y:t.clientY});
+  }, {passive:false});
+  c.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if(e.touches.length === 1){
+      const t=e.touches[0], prev=touches[t.identifier]||{x:t.clientX,y:t.clientY};
+      const dx=t.clientX-prev.x, dy=t.clientY-prev.y;
+      navState.velTheta -= dx*0.006; navState.velPhi -= dy*0.006;
+      touches[t.identifier]={x:t.clientX,y:t.clientY};
+      updateCam3();
+    } else if(e.touches.length >= 2){
+      const t0=e.touches[0], t1=e.touches[1];
+      const dist=Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
+      if(lastPinchDist > 0){
+        const scale = lastPinchDist/dist;
+        spherical.radius = Math.max(3, Math.min(200, spherical.radius * scale));
+        updateCam3();
+      }
+      lastPinchDist = dist;
+      touches[t0.identifier]={x:t0.clientX,y:t0.clientY};
+      touches[t1.identifier]={x:t1.clientX,y:t1.clientY};
+    }
+  }, {passive:false});
+  c.addEventListener('touchend', e => {
+    Array.from(e.changedTouches).forEach(t => delete touches[t.identifier]);
+    if(e.touches.length < 2) lastPinchDist=0;
+  });
+
+  // ── Render loop with momentum damping ─────────────────────────
   function syncSize(){
     const panel=document.getElementById('panel-3d');
     const cw=panel.clientWidth, ch=Math.max(1,panel.clientHeight-76);
     if(cw>10&&ch>10){renderer3.setSize(cw,ch);camera3.aspect=cw/ch;camera3.updateProjectionMatrix();}
   }
   syncSize();
-  (function animate(){requestAnimationFrame(animate);syncSize();renderer3.render(scene3,camera3);})();
+
+  const DAMP = 0.82; // momentum decay per frame (0=no momentum, 1=infinite coast)
+  (function animate(){
+    requestAnimationFrame(animate);
+    syncSize();
+
+    // Apply orbit momentum
+    if(Math.abs(navState.velTheta)>0.0001 || Math.abs(navState.velPhi)>0.0001){
+      spherical.theta += navState.velTheta;
+      spherical.phi = Math.max(0.06, Math.min(Math.PI/2-0.02,
+        spherical.phi + navState.velPhi));
+      navState.velTheta *= DAMP;
+      navState.velPhi   *= DAMP;
+      updateCam3();
+    }
+    // Apply pan momentum
+    if(Math.abs(navState.velTx)>0.0001 || Math.abs(navState.velTz)>0.0001){
+      spherical.tx += navState.velTx;
+      spherical.tz += navState.velTz;
+      navState.velTx *= DAMP;
+      navState.velTz *= DAMP;
+      updateCam3();
+    }
+
+    renderer3.render(scene3,camera3);
+  })();
 }
 
 function updateCam3(){
