@@ -2189,11 +2189,21 @@ function initThree(){
   scene3.fog=new THREE.Fog(0x12121f,80,250);
   camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
   updateCam3();
-  scene3.add(new THREE.AmbientLight(0xffffff,0.55));
-  const sun=new THREE.DirectionalLight(0xfff8e8,0.95);
-  sun.position.set(25,45,20); sun.castShadow=true; scene3.add(sun);
-  const fill=new THREE.DirectionalLight(0xc8d8ff,0.3);
-  fill.position.set(-18,12,-12); scene3.add(fill);
+  // Physically-based lighting for MeshStandardMaterial
+  scene3.add(new THREE.AmbientLight(0xd0d8e8, 0.7));  // soft sky ambient
+  const sun=new THREE.DirectionalLight(0xfff5e0, 1.8); // warm sun
+  sun.position.set(30, 60, 25);
+  sun.castShadow=true;
+  sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
+  sun.shadow.camera.near=0.5; sun.shadow.camera.far=300;
+  sun.shadow.camera.left=-80; sun.shadow.camera.right=80;
+  sun.shadow.camera.top=80;   sun.shadow.camera.bottom=-80;
+  sun.shadow.bias=-0.001;
+  scene3.add(sun);
+  const sky=new THREE.DirectionalLight(0xc8ddf8, 0.6); // cool sky fill
+  sky.position.set(-20, 30, -15); scene3.add(sky);
+  const bounce=new THREE.DirectionalLight(0xf0e8d0, 0.25); // warm ground bounce
+  bounce.position.set(0,-1,0); scene3.add(bounce);
 
   // ── Navigation state ──────────────────────────────────────────
   // vel* = momentum velocity (decays each frame)
@@ -3416,19 +3426,84 @@ function rebuild3d(){
   pos.needsUpdate=true;
   terrainGeo.computeVertexNormals();
 
-  const grassMat=new THREE.MeshLambertMaterial({color:0x3a6030,side:THREE.DoubleSide});
-  const grass=new THREE.Mesh(terrainGeo,grassMat);
+  // ── Vertex-colored terrain for natural ground appearance ─────
+  // Blend grass/earth/rock colors per-vertex based on slope and elevation
+  const pos2=terrainGeo.attributes.position;
+  const vCount=pos2.count;
+
+  // Compute per-vertex normals for slope detection
+  terrainGeo.computeVertexNormals();
+  const norms=terrainGeo.attributes.normal;
+
+  // Build vertex color array
+  const colors=new Float32Array(vCount*3);
+  // Base palette
+  const grassCol   ={r:0.22,g:0.38,b:0.16}; // medium lawn green
+  const dryCol     ={r:0.48,g:0.42,b:0.26}; // dry earth/straw
+  const earthCol   ={r:0.32,g:0.24,b:0.16}; // dark soil
+  const rockCol    ={r:0.45,g:0.43,b:0.40}; // grey rock
+
+  for(let i=0;i<vCount;i++){
+    const vx=pos2.getX(i), vy=pos2.getY(i), vz=pos2.getZ(i);
+    const ny=norms.getY(i); // Y component of normal — 1=flat, 0=vertical
+
+    // Slope factor: 0=flat, 1=very steep
+    const slope=Math.max(0, 1-ny);
+
+    // Is this vertex inside a flat zone (building footprint)? If so, use earth tone
+    let inFlat=false;
+    for(const fz of flatZones){
+      if(vx>=fz.x1-0.1&&vx<=fz.x2+0.1&&vz>=fz.z1-0.1&&vz<=fz.z2+0.1){inFlat=true;break;}
+    }
+
+    // Blend: flat areas = grass, steep = earth/rock, building zones = bare earth
+    let r,g,b;
+    if(inFlat){
+      // Under/near buildings: compacted earth
+      r=earthCol.r; g=earthCol.g; b=earthCol.b;
+    } else {
+      // Smooth blend: gentle slope=grass, steep=earth transitioning to rock
+      const grassT=Math.max(0, 1-slope*3.5);
+      const earthT=Math.min(1, slope*2.5)*Math.max(0, 1-slope*1.5);
+      const rockT =Math.max(0, slope-0.5)*2;
+      const tot=grassT+earthT+rockT||1;
+      r=(grassCol.r*grassT+dryCol.r*earthT+rockCol.r*rockT)/tot;
+      g=(grassCol.g*grassT+dryCol.g*earthT+rockCol.g*rockT)/tot;
+      b=(grassCol.b*grassT+dryCol.b*earthT+rockCol.b*rockT)/tot;
+    }
+
+    // Subtle elevation-based variation: higher = slightly lighter/cooler
+    const elevT=Math.max(0,Math.min(1,(vy-slopeLo)/(Math.abs(slopeHi-slopeLo)+0.01)));
+    r+=elevT*0.03; g+=elevT*0.03; b+=elevT*0.02;
+
+    // Tiny hash-based noise to break up uniformity
+    const noise=((vx*127.1+vz*311.7)%1+1)%1*0.06-0.03;
+    colors[i*3  ]=Math.max(0,Math.min(1,r+noise));
+    colors[i*3+1]=Math.max(0,Math.min(1,g+noise*0.8));
+    colors[i*3+2]=Math.max(0,Math.min(1,b+noise*0.5));
+  }
+  terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+
+  const terrainMat=new THREE.MeshStandardMaterial({
+    vertexColors:true,
+    roughness:0.92,
+    metalness:0.0,
+    side:THREE.FrontSide,
+  });
+  const grass=new THREE.Mesh(terrainGeo, terrainMat);
   grass.receiveShadow=true; grass.userData.fp=true; scene3.add(grass);
 
-  // Dirt fill box beneath the terrain — no slope needed, just fill the gap
-  // Dirt fill box — exactly lot size, fills below terrain surface
-  const dirtMat=new THREE.MeshLambertMaterial({color:0x5a4030});
-  const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW, 30, lotSD), dirtMat);
-  dirt.position.set((lotX1+lotX2)/2, -15, (lotZ1+lotZ2)/2);
+  // Find lowest terrain point for dirt fill — no brown poking above surface
+  let minTerrainY=0;
+  for(let i=0;i<vCount;i++) minTerrainY=Math.min(minTerrainY, pos2.getY(i));
+  const dirtDepth=Math.max(4, Math.abs(minTerrainY)+2);
+  const dirtMat=new THREE.MeshStandardMaterial({color:0x3a2a18, roughness:1.0, metalness:0.0});
+  const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW, dirtDepth, lotSD), dirtMat);
+  dirt.position.set((lotX1+lotX2)/2, minTerrainY-dirtDepth/2, (lotZ1+lotZ2)/2);
   dirt.userData.fp=true; scene3.add(dirt);
 
   // Lot boundary edge — thin dark curb at the perimeter to give a clean termination
-  const edgeMat=new THREE.MeshLambertMaterial({color:0x222222});
+  const edgeMat=new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:0.9,metalness:0.05});
   const edgeH=0.15, edgeT=0.15;
   const lotCX=(lotX1+lotX2)/2, lotCZ=(lotZ1+lotZ2)/2;
   // N edge (z=lotZ1), S edge (z=lotZ2), W edge (x=lotX1), E edge (x=lotX2)
