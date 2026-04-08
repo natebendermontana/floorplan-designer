@@ -1701,6 +1701,14 @@ function updateProps() {
       const len=(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(1);
       html+=row('Length',val(`${len} ft`));
     }
+    // Sits on: terrain (default) or fixed floor level
+    const defFT_m = defaultFollowTerrain(el);
+    const curFT_m = el.followTerrain!==undefined ? el.followTerrain : defFT_m;
+    html+=row('Sits on',
+      `<select class="prop-input" id="pe-followterrain">
+        <option value="1"${curFT_m?' selected':''}>Terrain (slope)</option>
+        <option value="0"${!curFT_m?' selected':''}>Fixed floor level</option>
+      </select>`);
   }
   else if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
   else if(el.type==='roof'){
@@ -2461,6 +2469,25 @@ function initThree(){
 
   // Double-click: fit view
   c.addEventListener('dblclick', () => fitView3d());
+
+  // Keyboard nav directly on canvas (works when canvas is focused)
+  c.setAttribute('tabindex','0');
+  c.addEventListener('keydown', e => {
+    if(!panel3dOpen) return;
+    const PAN = spherical.radius * 0.05;
+    const sinT=Math.sin(spherical.theta), cosT=Math.cos(spherical.theta);
+    if(e.shiftKey){
+      if(e.key==='ArrowUp')  { spherical.ty+=PAN; updateCam3(); e.preventDefault(); }
+      if(e.key==='ArrowDown'){ spherical.ty-=PAN; updateCam3(); e.preventDefault(); }
+    } else {
+      if(e.key==='ArrowLeft') { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; updateCam3(); e.preventDefault(); }
+      if(e.key==='ArrowRight'){ spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; updateCam3(); e.preventDefault(); }
+      if(e.key==='ArrowUp')   { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; updateCam3(); e.preventDefault(); }
+      if(e.key==='ArrowDown') { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; updateCam3(); e.preventDefault(); }
+      if(e.key==='+' || e.key==='='){ spherical.radius=Math.max(3,spherical.radius/1.15); updateCam3(); e.preventDefault(); }
+      if(e.key==='-'){ spherical.radius=Math.min(200,spherical.radius*1.15); updateCam3(); e.preventDefault(); }
+    }
+  });
 
   // Touch: one finger = orbit, two fingers = pinch-zoom + pan
   let touches = {};
