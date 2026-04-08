@@ -2278,14 +2278,20 @@ document.addEventListener('keydown',e=>{
   if(document.activeElement&&['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
   const PAN = spherical.radius * 0.05; // pan speed scales with zoom level
   const sinT=Math.sin(spherical.theta), cosT=Math.cos(spherical.theta);
-  if(e.key==='ArrowLeft')  { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; e.preventDefault(); }
-  if(e.key==='ArrowRight') { spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; e.preventDefault(); }
-  if(e.key==='ArrowUp')    { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; e.preventDefault(); }
-  if(e.key==='ArrowDown')  { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; e.preventDefault(); }
-  if(e.key==='+' || e.key==='=') { spherical.radius=Math.max(3,spherical.radius/1.15); e.preventDefault(); }
-  if(e.key==='-')                { spherical.radius=Math.min(200,spherical.radius*1.15); e.preventDefault(); }
-  if(e.key==='f' || e.key==='F') { fitView3d(); e.preventDefault(); }
-  if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='+'||e.key==='-'||e.key==='='||e.key==='f'||e.key==='F') updateCam3();
+  if(e.shiftKey){
+    // Shift+Arrow = move camera target vertically
+    if(e.key==='ArrowUp')   { spherical.ty+=PAN; e.preventDefault(); updateCam3(); }
+    if(e.key==='ArrowDown') { spherical.ty-=PAN; e.preventDefault(); updateCam3(); }
+  } else {
+    if(e.key==='ArrowLeft')  { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; e.preventDefault(); }
+    if(e.key==='ArrowRight') { spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; e.preventDefault(); }
+    if(e.key==='ArrowUp')    { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; e.preventDefault(); }
+    if(e.key==='ArrowDown')  { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; e.preventDefault(); }
+    if(e.key==='+' || e.key==='=') { spherical.radius=Math.max(3,spherical.radius/1.15); e.preventDefault(); }
+    if(e.key==='-')                { spherical.radius=Math.min(200,spherical.radius*1.15); e.preventDefault(); }
+    if(e.key==='f' || e.key==='F') { fitView3d(); e.preventDefault(); }
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='+'||e.key==='-'||e.key==='='||e.key==='f'||e.key==='F') updateCam3();
+  }
 },true);
 
 // Drag resizer
@@ -2329,8 +2335,8 @@ function initThree(){
   camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
   updateCam3();
   // Physically-based lighting for MeshStandardMaterial
-  scene3.add(new THREE.AmbientLight(0xd0d8e8, 0.7));  // soft sky ambient
-  const sun=new THREE.DirectionalLight(0xfff5e0, 1.8); // warm sun
+  scene3.add(new THREE.AmbientLight(0xd0d8e8, 0.55));  // soft sky ambient
+  const sun=new THREE.DirectionalLight(0xfff5e0, 1.4); // warm sun
   sun.position.set(30, 60, 25);
   sun.castShadow=true;
   sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
@@ -2339,9 +2345,9 @@ function initThree(){
   sun.shadow.camera.top=80;   sun.shadow.camera.bottom=-80;
   sun.shadow.bias=-0.001;
   scene3.add(sun);
-  const sky=new THREE.DirectionalLight(0xc8ddf8, 0.6); // cool sky fill
+  const sky=new THREE.DirectionalLight(0xc8ddf8, 0.4); // cool sky fill
   sky.position.set(-20, 30, -15); scene3.add(sky);
-  const bounce=new THREE.DirectionalLight(0xf0e8d0, 0.25); // warm ground bounce
+  const bounce=new THREE.DirectionalLight(0xf0e8d0, 0.18); // warm ground bounce
   bounce.position.set(0,-1,0); scene3.add(bounce);
 
   // ── Navigation state ──────────────────────────────────────────
@@ -2658,11 +2664,13 @@ function rebuild3d(){
       else if(el.fixedElev) yBase=0;          // user pinned to floor level
       else yBase=slopeOffset(ex3,ez3);        // default: follows terrain
     } else if(el.type==='member'){
-      // Posts: terrain height at placement point. Beams/braces: floor level (elevation is absolute).
+      // Posts: terrain at post foot. Line members: average terrain of endpoints.
       if(el.role==='post'){
         yBase = slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
       } else {
-        yBase = 0;
+        const y1t=slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
+        const y2t=slopeOffset(el.x2/PX_PER_FT-cx, el.y2/PX_PER_FT-cz);
+        yBase = (y1t+y2t)/2; // midpoint terrain — used as reference
       }
     } else if(el.type==='roof'){
       // Roof sits on top of the highest floor that has rooms beneath its footprint.
@@ -3128,23 +3136,46 @@ function rebuild3d(){
             if(under){const span=Math.min(under.w,under.h)/PX_PER_FT;mElev=wallH+(span/2)*(under.pitch??6)/12;}
           }
           const planAng=Math.atan2(mdz,mdx);
+          // Terrain height at both endpoints
+          const yTerr1=slopeOffset(lx1,lz1);
+          const yTerr2=slopeOffset(lx2,lz2);
+          // Each endpoint's "floor" = terrain + 0 for ground-floor members
+          // Elevation above terrain is constant (wallH for beam/plate/ridge)
+          const y1world=yTerr1+mElev;  // world Y at endpoint 1 top
+          const y2world=yTerr2+mElev;  // world Y at endpoint 2 top
+          const yMidWorld=(y1world+y2world)/2;
+          // Vertical rise along the member in world space (from slope)
+          const dyWorld=y2world-y1world;
+
           if(el.role==='brace'){
-            // Use stored braceRun/braceSpring if available, else derive from geometry
             const hRun=(el.braceRun!=null)?el.braceRun:hLen;
             const springH=(el.braceSpring!=null)?el.braceSpring:wallH*(2/3);
-            const vRise=hRun; // 45° brace: rise = run
-            const totalLen=Math.hypot(hRun,vRise);
-            const yBot=yBase+springH;           // where brace meets post
-            const yTop=yBot+vRise;              // where brace meets beam
-            const yMid=(yBot+yTop)/2;
-            const m=new THREE.Mesh(new THREE.BoxGeometry(totalLen,sh,sw),timberMat);
-            m.position.set((lx1+lx2)/2,yMid,(lz1+lz2)/2);
-            m.rotation.y=-planAng; m.rotation.z=Math.atan2(vRise,hRun);
+            const vRise=hRun; // 45° locally
+            // Both endpoints sit at terrain of post
+            const ySpring1=yTerr1+springH;
+            const yBeam1  =yTerr1+mElev;
+            const yBotMid=(ySpring1+yBeam1)/2;
+            // Total diagonal in 3D: horizontal run + vertical rise + any slope delta
+            const slopeDelta=(yTerr2-yTerr1);
+            const diagLen=Math.hypot(hRun, vRise);
+            const m=new THREE.Mesh(new THREE.BoxGeometry(diagLen,sh,sw),timberMat);
+            m.position.set((lx1+lx2)/2, yBotMid, (lz1+lz2)/2);
+            m.rotation.y=-planAng;
+            m.rotation.z=Math.atan2(vRise, hRun);
             m.castShadow=true; addFM(m);
           } else {
+            // Beam / plate / ridge: tilted to follow the slope between endpoints
+            // Use a Group to apply both plan rotation and slope tilt cleanly
+            const grp=new THREE.Group();
+            grp.position.set((lx1+lx2)/2, yMidWorld-sh/2, (lz1+lz2)/2);
+            grp.rotation.y=-planAng;
+            // Slope tilt angle in elevation (rise/run along the member direction)
+            grp.rotation.z=-Math.atan2(dyWorld, hLen);
             const m=new THREE.Mesh(new THREE.BoxGeometry(hLen,sh,sw),timberMat);
-            m.position.set((lx1+lx2)/2,yBase+mElev-sh/2,(lz1+lz2)/2);
-            m.rotation.y=-planAng; m.castShadow=true; addFM(m);
+            m.castShadow=true;
+            grp.add(m);
+            grp.userData.fp=true; grp.userData.isFrame=true;
+            grp.visible=!!layerVisible.frame; scene3.add(grp);
           }
         }
       }
@@ -3615,11 +3646,12 @@ function rebuild3d(){
     const elevT=Math.max(0,Math.min(1,(vy-slopeLo)/(Math.abs(slopeHi-slopeLo)+0.01)));
     r+=elevT*0.03; g+=elevT*0.03; b+=elevT*0.02;
 
-    // Smooth sin-based noise — no float-modulo artifacts
-    const noise=(Math.sin(vx*2.3+vz*1.7)*0.5+Math.sin(vx*1.1-vz*3.1)*0.5)*0.022;
+    // Subtle noise — scales with slope so flat terrain stays uniform
+    const noiseAmt = 0.028 * slope + 0.006; // nearly zero on flat
+    const noise=(Math.sin(vx*1.9+vz*2.3)*0.6+Math.sin(vx*3.7-vz*1.3)*0.4)*noiseAmt;
     colors[i*3  ]=Math.max(0,Math.min(1,r+noise));
-    colors[i*3+1]=Math.max(0,Math.min(1,g+noise*0.9));
-    colors[i*3+2]=Math.max(0,Math.min(1,b+noise*0.4));
+    colors[i*3+1]=Math.max(0,Math.min(1,g+noise*0.85));
+    colors[i*3+2]=Math.max(0,Math.min(1,b+noise*0.3));
   }
   terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
 
