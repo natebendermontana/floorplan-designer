@@ -1258,15 +1258,13 @@ function render2d() {
   const roofs    = elements.filter(e => e.type==='roof');
   const members  = elements.filter(e => e.type==='member');
   const nonRoofs = elements.filter(e => e.type!=='roof' && e.type!=='member');
-  // Outdoor elements (followTerrain default=true, floor='outdoor' or just floor 0)
-  // They're controlled by layerVisible.outdoor
-  const isOutdoor = e => defaultFollowTerrain(e) && e.type!=='member';
+  const isOutdoorEl = e => e.type==='furniture' && defaultFollowTerrain(e);
   const otherFloor = nonRoofs.filter(e => {
-    if(isOutdoor(e)) return layerVisible.outdoor && (e.floor||0)!==currentFloor;
+    if(isOutdoorEl(e)) return layerVisible.outdoor && (e.floor||0)!==currentFloor;
     return layerVisible[(e.floor||0)] && (e.floor||0)!==currentFloor;
   });
   const thisFloor = nonRoofs.filter(e => {
-    if(isOutdoor(e)) return layerVisible.outdoor && (e.floor||0)===currentFloor;
+    if(isOutdoorEl(e)) return layerVisible.outdoor;  // always on "this" layer when O active
     return layerVisible[(e.floor||0)] && (e.floor||0)===currentFloor;
   });
   for (const el of [...otherFloor, ...thisFloor]) {
@@ -1336,7 +1334,12 @@ function render2d() {
 // HIT TEST  (only hit elements on current floor)
 // ══════════════════════════════════════════════════
 function hitTest(x,y) {
-  const candidates = elements.filter(e=>e.type==='member'?layerVisible.frame:(e.type==='roof'?layerVisible.roof:((e.floor||0)===currentFloor&&layerVisible[(e.floor||0)])));
+  const candidates = elements.filter(e=>{
+    if(e.type==='member') return layerVisible.frame;
+    if(e.type==='roof')   return layerVisible.roof;
+    if(e.type==='furniture'&&defaultFollowTerrain(e)) return layerVisible.outdoor;
+    return (e.floor||0)===currentFloor && layerVisible[(e.floor||0)];
+  });
   for (let i=candidates.length-1; i>=0; i--) {
     const el=candidates[i];
     if(el.type==='wall'){
@@ -1372,7 +1375,10 @@ function rectSelect() {
   const rx2=Math.max(rectSelStart.x,rectSelEnd.x), ry2=Math.max(rectSelStart.y,rectSelEnd.y);
   if((rx2-rx1)<4&&(ry2-ry1)<4) return;
   multiSel=elements.filter(el=>{
-    if(el.type==='member'){ return layerVisible.frame; } if(el.type==='roof'){ return layerVisible.roof; } if((el.floor||0)!==currentFloor) return false;
+    if(el.type==='member') return layerVisible.frame;
+    if(el.type==='roof') return layerVisible.roof;
+    if(el.type==='furniture'&&defaultFollowTerrain(el)) return layerVisible.outdoor;
+    if((el.floor||0)!==currentFloor) return false;
     const c=elCenter(el);
     return c.x>=rx1&&c.x<=rx2&&c.y>=ry1&&c.y<=ry2;
   });
@@ -2662,7 +2668,7 @@ function rebuild3d(){
   // If not set, it defaults to the terrain height at the room's centre.
   // This makes the system transparent: user can read and edit elevation directly.
 
-  const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed'];
+  const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area','floor-cutout'];
   const floorCutouts=elements.filter(e=>e.type==='furniture'&&e.ftype==='floor-cutout');
 
   // Compute terrain Y at a canvas-px position
@@ -2723,8 +2729,10 @@ function rebuild3d(){
     if(el.type==='room'){
       yBase=roomElev(el);
     } else if(el.type==='member'){
-      // Members: posts sit on terrain; line members use terrain at endpoints
-      if(el.role==='post'){
+      // followTerrain=true (default): sit on slope. false: fixed floor level (0).
+      if(!getFollowTerrain(el)){
+        yBase = 0; // fixed floor — no slope
+      } else if(el.role==='post'){
         yBase = slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
       } else {
         const y1t=slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
@@ -3218,15 +3226,13 @@ function rebuild3d(){
             if(under){const span=Math.min(under.w,under.h)/PX_PER_FT;mElev=wallH+(span/2)*(under.pitch??6)/12;}
           }
           const planAng=Math.atan2(mdz,mdx);
-          // Terrain height at both endpoints
-          const yTerr1=slopeOffset(lx1,lz1);
-          const yTerr2=slopeOffset(lx2,lz2);
-          // Each endpoint's "floor" = terrain + 0 for ground-floor members
-          // Elevation above terrain is constant (wallH for beam/plate/ridge)
-          const y1world=yTerr1+mElev;  // world Y at endpoint 1 top
-          const y2world=yTerr2+mElev;  // world Y at endpoint 2 top
+          // Terrain height at both endpoints — zero if member is fixed to floor
+          const _ft=getFollowTerrain(el);
+          const yTerr1=_ft?slopeOffset(lx1,lz1):0;
+          const yTerr2=_ft?slopeOffset(lx2,lz2):0;
+          const y1world=yTerr1+mElev;
+          const y2world=yTerr2+mElev;
           const yMidWorld=(y1world+y2world)/2;
-          // Vertical rise along the member in world space (from slope)
           const dyWorld=y2world-y1world;
 
           if(el.role==='brace'){
