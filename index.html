@@ -188,6 +188,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <button class="tool-tile" data-tool="stairs-straight"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><line x1="3" y1="5.5" x2="15" y2="5.5"/><line x1="3" y1="8.5" x2="15" y2="8.5"/><line x1="3" y1="11.5" x2="15" y2="11.5"/></svg>Stairs</button>
   <button class="tool-tile" data-tool="stairs-landing"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><line x1="3" y1="5.5" x2="15" y2="5.5"/><rect x="3" y="8" width="12" height="2" fill="currentColor" opacity=".2"/><line x1="3" y1="11.5" x2="15" y2="11.5"/></svg>Stairs w/landing</button>
   <button class="tool-tile" data-tool="stairs-l"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="7" height="9"/><rect x="2" y="9" width="14" height="7"/></svg>L stairs</button>
+  <div class="strip-sep"></div>
+  <button class="tool-tile" data-tool="zone"><svg viewBox="0 0 18 18" fill="none" stroke="#06b6d4" stroke-width="1.5"><polygon points="3,14 9,3 15,7 13,15" stroke-dasharray="3 2"/><circle cx="3" cy="14" r="1.5" fill="#06b6d4" stroke="none"/><circle cx="9" cy="3" r="1.5" fill="#06b6d4" stroke="none"/><circle cx="15" cy="7" r="1.5" fill="#06b6d4" stroke="none"/><circle cx="13" cy="15" r="1.5" fill="#06b6d4" stroke="none"/></svg>Zone</button>
 </div>
 <div id="main">
   <div id="sidebar">
@@ -336,7 +338,9 @@ let tool = 'select';
 let drawing = false, previewStart = null, previewEnd = null;
 let dragEl = null, dragStart = null;
 let activeSnapHint = null;
-let braceFirstEl = null;  // post selected as first click for brace tool // {x,y} canvas px — drawn as indicator during drag
+let braceFirstEl = null;  // post selected as first click for brace tool
+let zonePts = [];          // in-progress zone polygon vertices
+let zonePreviewPt = null;  // mouse position while placing zone // {x,y} canvas px — drawn as indicator during drag
 let dragMultiOrigins = null;
 let activeHandle = null;
 let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
@@ -446,8 +450,13 @@ function getScreenPos(e) {
   return { x: src.clientX - r.left, y: src.clientY - r.top };
 }
 function elCenter(el) {
-  if (el.type==='room') return { x:el.x+el.w/2, y:el.y+el.h/2 };
-  if (el.type==='wall') return { x:(el.x1+el.x2)/2, y:(el.y1+el.y2)/2 };
+  if (el.type==='room'||el.type==='roof') return { x:el.x+el.w/2, y:el.y+el.h/2 };
+  if (el.type==='wall'||el.type==='member') return { x:(el.x1+el.x2)/2, y:(el.y1+el.y2)/2 };
+  if (el.type==='zone'&&el.pts?.length){
+    const sx=el.pts.reduce((s,p)=>s+p.x,0)/el.pts.length;
+    const sy=el.pts.reduce((s,p)=>s+p.y,0)/el.pts.length;
+    return {x:sx,y:sy};
+  }
   return { x:el.x, y:el.y };
 }
 function saveHistory() {
@@ -758,6 +767,75 @@ function drawMember(el, sel) {
       ctx.restore();
     }
     if(sel) drawHandles(el);
+  }
+  ctx.restore();
+}
+
+// Shoelace formula for polygon area in px²
+function polyAreaPx(pts){
+  let a=0;
+  for(let i=0;i<pts.length;i++){
+    const j=(i+1)%pts.length;
+    a+=pts[i].x*pts[j].y - pts[j].x*pts[i].y;
+  }
+  return Math.abs(a)/2;
+}
+
+function drawZone(el, sel){
+  const pts=el.pts;
+  if(!pts||pts.length<2) return;
+  const alpha=floorAlpha(el);
+  ctx.save(); ctx.globalAlpha=alpha;
+  const accentCol=sel?'#0ea5e9':'#06b6d4'; // cyan/teal
+  // Fill
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle=sel?'rgba(14,165,233,0.10)':'rgba(6,182,212,0.07)';
+  ctx.fill();
+  // Dashed outline
+  ctx.strokeStyle=accentCol; ctx.lineWidth=sel?2:1.5; ctx.setLineDash([6,4]);
+  ctx.stroke(); ctx.setLineDash([]);
+  // Centroid label
+  let cx2=0,cy2=0;
+  pts.forEach(p=>{cx2+=p.x;cy2+=p.y;});
+  cx2/=pts.length; cy2/=pts.length;
+  const areaSqFt=polyAreaPx(pts)/(PX_PER_FT*PX_PER_FT);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if(el.label){
+    ctx.font='bold 12px -apple-system,sans-serif';
+    ctx.fillStyle='rgba(6,182,212,0.75)';
+    ctx.fillText(el.label,cx2,cy2-8);
+    ctx.font='10px -apple-system,sans-serif';
+    ctx.fillStyle='rgba(6,182,212,0.55)';
+    ctx.fillText(areaSqFt.toFixed(1)+' ft²',cx2,cy2+6);
+  } else {
+    ctx.font='10px -apple-system,sans-serif';
+    ctx.fillStyle='rgba(6,182,212,0.55)';
+    ctx.fillText(areaSqFt.toFixed(1)+' ft²',cx2,cy2);
+  }
+  ctx.textAlign='left';
+  if(sel) drawHandles(el);
+  ctx.restore();
+}
+
+// Draw in-progress zone while placing
+function drawZonePreview(){
+  if(zonePts.length===0||!zonePreviewPt) return;
+  ctx.save();
+  ctx.strokeStyle='#06b6d4'; ctx.lineWidth=1.5; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(zonePts[0].x,zonePts[0].y);
+  for(let i=1;i<zonePts.length;i++) ctx.lineTo(zonePts[i].x,zonePts[i].y);
+  ctx.lineTo(zonePreviewPt.x,zonePreviewPt.y); ctx.stroke();
+  ctx.setLineDash([]);
+  // Vertices
+  ctx.fillStyle='#06b6d4';
+  zonePts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill();});
+  // Close hint: highlight start vertex when near
+  const dx=zonePreviewPt.x-zonePts[0].x, dy=zonePreviewPt.y-zonePts[0].y;
+  if(Math.hypot(dx,dy)<SNAP()*1.5&&zonePts.length>=3){
+    ctx.strokeStyle='#06b6d4'; ctx.lineWidth=2; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(zonePts[0].x,zonePts[0].y,8,0,Math.PI*2); ctx.stroke();
   }
   ctx.restore();
 }
@@ -1280,6 +1358,12 @@ function render2d() {
       drawRoof(el, (el===selected)||multiSel.includes(el));
     }
   }
+  // Zones rendered on top of rooms, below walls
+  for (const el of nonRoofs.filter(e=>e.type==='zone')) {
+    if(layerVisible[(e.floor||0)]) drawZone(el,(el===selected)||multiSel.includes(el));
+  }
+  // In-progress zone
+  if(tool==='zone') drawZonePreview();
   for (const el of members) {
     drawMember(el, (el===selected)||multiSel.includes(el));
   }
@@ -1338,6 +1422,7 @@ function hitTest(x,y) {
     if(e.type==='member') return layerVisible.frame;
     if(e.type==='roof')   return layerVisible.roof;
     if(e.type==='furniture'&&defaultFollowTerrain(e)) return layerVisible.outdoor;
+    if(e.type==='zone') return layerVisible[(e.floor||0)];
     return (e.floor||0)===currentFloor && layerVisible[(e.floor||0)];
   });
   for (let i=candidates.length-1; i>=0; i--) {
@@ -1406,6 +1491,7 @@ canvas2d.addEventListener('mousemove',e=>{
   const{x,y}=getPos(e), sp=snapPt(x,y);
   document.getElementById('st-pos').textContent=`${(sp.x/PX_PER_FT).toFixed(1)}, ${(sp.y/PX_PER_FT).toFixed(1)} ft`;
   if(tool==='rect-select'&&rectSelActive){rectSelEnd={x,y};render2d();return;}
+  if(tool==='zone'){zonePreviewPt=sp;if(zonePts.length>0)render2d();return;}
   if(drawing){previewEnd=sp;render2d();return;}
   if(activeHandle){
     const{type,role,el,origin,mouseStart}=activeHandle;
@@ -1498,6 +1584,23 @@ canvas2d.addEventListener('mousedown',e=>{
       elements.push(newPost);selected=newPost;multiSel=[];updateProps();render2d();return;
     }
     if(!drawing){drawing=true;previewStart=sp;previewEnd=sp;}return;
+  }
+  if(tool==='zone'){
+    const CLOSE_R=SNAP()*1.5;
+    // Double-click closes the zone
+    // Single click adds a vertex (double-click fires after, handled separately)
+    if(zonePts.length>=3 && Math.hypot(sp.x-zonePts[0].x,sp.y-zonePts[0].y)<CLOSE_R){
+      // Close polygon
+      saveHistory();
+      elements.push({type:'zone',pts:[...zonePts],label:'',floor:currentFloor});
+      zonePts=[]; zonePreviewPt=null;
+      switchToSelect(elements[elements.length-1]);
+      render2d();
+    } else {
+      zonePts.push({x:sp.x,y:sp.y});
+      render2d();
+    }
+    return;
   }
   if(tool==='member-brace'){
     // Two-click brace: click 1 = post, click 2 = beam
@@ -1654,21 +1757,42 @@ canvas2d.addEventListener('mouseup',e=>{
   document.getElementById('st-dim').textContent='';render2d();
 });
 
+canvas2d.addEventListener('dblclick', e => {
+  if(tool!=='zone') return;
+  e.preventDefault();
+  if(zonePts.length>=3){
+    const{x,y}=getPos(e), sp=snapPt(x,y);
+    saveHistory();
+    // Remove the last click-added point (it was added by the mousedown before dblclick)
+    const pts=zonePts.length>3?zonePts.slice(0,-1):zonePts;
+    elements.push({type:'zone',pts:[...pts],label:'',floor:currentFloor});
+    zonePts=[]; zonePreviewPt=null;
+    switchToSelect(elements[elements.length-1]);
+    render2d();
+  }
+});
+
 // ══════════════════════════════════════════════════
 // AREA CALCULATIONS
 // ══════════════════════════════════════════════════
 function updateAreas() {
   const rooms=elements.filter(e=>e.type==='room');
-  const _totalEl=document.getElementById('total-area'); if(_totalEl) _totalEl.textContent=(rooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)).toFixed(1);
-  const gRooms=rooms.filter(r=>(r.floor||0)===0), uRooms=rooms.filter(r=>(r.floor||0)===1);
-  const gTotal=gRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0);
-  const uTotal=uRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0);
+  const zones=elements.filter(e=>e.type==='zone');
+  const allItems=[...rooms,...zones];
+  const _totalEl=document.getElementById('total-area');
+  if(_totalEl) _totalEl.textContent=(rooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)).toFixed(1);
   const list=document.getElementById('area-list');
-  if(!rooms.length){list.innerHTML='<span style="color:var(--text3)">No rooms yet</span>';return;}
+  if(!allItems.length){list.innerHTML='<span style="color:var(--text3)">No rooms or zones yet</span>';return;}
+  const gRooms=rooms.filter(r=>(r.floor||0)===0), uRooms=rooms.filter(r=>(r.floor||0)===1);
+  const gZones=zones.filter(z=>(z.floor||0)===0), uZones=zones.filter(z=>(z.floor||0)===1);
+  const gTotal=gRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)+gZones.reduce((s,z)=>s+polyAreaPx(z.pts||[])/(PX_PER_FT*PX_PER_FT),0);
+  const uTotal=uRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)+uZones.reduce((s,z)=>s+polyAreaPx(z.pts||[])/(PX_PER_FT*PX_PER_FT),0);
   let html='';
-  if(gRooms.length){html+=`<div style="font-size:10px;font-weight:500;color:var(--text3);margin:3px 0 2px;text-transform:uppercase;letter-spacing:.06em">Ground</div>`;html+=gRooms.map(r=>`<div class="area-row"><span class="room-name">${r.label||'Unlabeled'}</span><span class="room-sqft">${((r.w/PX_PER_FT)*(r.h/PX_PER_FT)).toFixed(1)} ft\u00b2</span></div>`).join('');}
-  if(uRooms.length){html+=`<div style="font-size:10px;font-weight:500;color:var(--text3);margin:5px 0 2px;text-transform:uppercase;letter-spacing:.06em">Upper</div>`;html+=uRooms.map(r=>`<div class="area-row"><span class="room-name">${r.label||'Unlabeled'}</span><span class="room-sqft">${((r.w/PX_PER_FT)*(r.h/PX_PER_FT)).toFixed(1)} ft\u00b2</span></div>`).join('');}
-  if(rooms.length>1)html+=`<div class="area-total"><span>Total</span><span>${(gTotal+uTotal).toFixed(1)} ft\u00b2</span></div>`;
+  const roomRow=r=>`<div class="area-row"><span class="room-name">${r.label||'Unlabeled'}</span><span class="room-sqft">${((r.w/PX_PER_FT)*(r.h/PX_PER_FT)).toFixed(1)} ft²</span></div>`;
+  const zoneRow=z=>`<div class="area-row"><span class="room-name" style="color:#06b6d4">${z.label||'Zone'}</span><span class="room-sqft">${(polyAreaPx(z.pts||[])/(PX_PER_FT*PX_PER_FT)).toFixed(1)} ft²</span></div>`;
+  if(gRooms.length||gZones.length){html+=`<div style="font-size:10px;font-weight:500;color:var(--text3);margin:3px 0 2px;text-transform:uppercase;letter-spacing:.06em">Ground</div>`;html+=gRooms.map(roomRow).join('');html+=gZones.map(zoneRow).join('');}
+  if(uRooms.length||uZones.length){html+=`<div style="font-size:10px;font-weight:500;color:var(--text3);margin:5px 0 2px;text-transform:uppercase;letter-spacing:.06em">Upper</div>`;html+=uRooms.map(roomRow).join('');html+=uZones.map(zoneRow).join('');}
+  if(allItems.length>1) html+=`<div class="area-total"><span>Total</span><span>${(gTotal+uTotal).toFixed(1)} ft²</span></div>`;
   list.innerHTML=html;
 }
 
@@ -1715,6 +1839,13 @@ function updateProps() {
         <option value="1"${curFT_m?' selected':''}>Terrain (slope)</option>
         <option value="0"${!curFT_m?' selected':''}>Fixed floor level</option>
       </select>`);
+  }
+  else if(el.type==='zone'){
+    const areaSqFt=(polyAreaPx(el.pts||[])/(PX_PER_FT*PX_PER_FT)).toFixed(1);
+    html+=row('Area',val(`${areaSqFt} ft²`));
+    html+=row('Label',inp('pe-label','text',el.label||'','placeholder="Zone name"'));
+    html+=row('Vertices',val(`${(el.pts||[]).length} pts`));
+    html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
   }
   else if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
   else if(el.type==='roof'){
@@ -1853,7 +1984,8 @@ function updateProps() {
 // ══════════════════════════════════════════════════
 // TOOL BUTTONS
 // ══════════════════════════════════════════════════
-const hints={'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Step 1: click near a POST → Step 2: click any BEAM to place 45° brace','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
+const hints={'zone':'Click to add vertices — double-click or click near start point to close the polygon',
+'member-post':'Click to place a post (6×6" default, 12 ft spacing)','member-beam':'Drag to place a beam (6×10" default)','member-plate':'Drag to place a wall plate (6×8" default)','member-ridge':'Drag to place a ridge beam (6×10" default)','member-brace':'Step 1: click near a POST → Step 2: click any BEAM to place 45° brace','roof-flat':'Click + drag to draw a flat roof','roof-shed':'Click + drag to draw a shed roof','roof-gable':'Click + drag to draw a gable roof','roof-hip':'Click + drag to draw a hip roof',select:'Click · drag to move · blue handles resize · green rotates','rect-select':'Click and drag to select multiple items','floor-cutout':'Click to place a floor void (removes upper floor planks)',wall:'Click + drag to draw a wall','half-wall':'Click + drag to draw a half-height wall','landscape-wall':'Click + drag to draw a landscape wall',room:'Click + drag to draw a room',window:'Click to place','picture-window':'Click to place','bay-window':'Click to place',skylight:'Click to place',door:'Click to place','double-door':'Click to place','sliding-door':'Click to place','pocket-door':'Click to place'}; Object.keys(FDEFS).forEach(k=>hints[k]='Click to place '+FDEFS[k].label);
 // ── Dropdown tool menus ──────────────────────────────────────
 // DD_MAP removed — replaced by inline tool strip
 // ── Tool strip: toggle open/closed per category ──────────────────
@@ -2028,6 +2160,7 @@ document.addEventListener('mousedown', e => {
   document.getElementById('st-hint').textContent = hints[tool] || '';
   drawing = false; previewStart = null; previewEnd = null; rectSelStart = null; rectSelEnd = null; rectSelActive = false;
   braceFirstEl = null;
+  zonePts = []; zonePreviewPt = null;
   if (typeof reactivateToolTiles === 'function') reactivateToolTiles();
   render2d();
 });
@@ -2252,7 +2385,10 @@ document.addEventListener('keydown',e=>{
     if(multiSel.length>1){saveHistory();elements=elements.filter(x=>!multiSel.includes(x));multiSel=[];selected=null;updateProps();render2d();}
     else if(selected){saveHistory();elements=elements.filter(x=>x!==selected);selected=null;updateProps();render2d();}
   }
-  if(e.key==='Escape'){selected=null;multiSel=[];updateProps();render2d();}
+  if(e.key==='Escape'){
+    if(zonePts.length>0){zonePts=[];zonePreviewPt=null;render2d();return;}
+    selected=null;multiSel=[];updateProps();render2d();
+  }
   if(e.key==='Home'){fitView();}
   const keys={v:'select',l:'rect-select',w:'wall',h:'half-wall',r:'room',n:'window',d:'door'};
   if(keys[e.key])document.querySelector(`[data-tool="${keys[e.key]}"]`).click();
