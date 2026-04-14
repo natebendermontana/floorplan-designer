@@ -349,8 +349,11 @@ let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
 // LAYOUT
 // ══════════════════════════════════════════════════
 function resize() {
-  canvas2d.width = wrap.clientWidth;
-  canvas2d.height = wrap.clientHeight - 26;
+  const nw = wrap.clientWidth;
+  const nh = wrap.clientHeight - 26;
+  if(canvas2d.width === nw && canvas2d.height === nh) return; // no change — skip
+  canvas2d.width = nw;
+  canvas2d.height = nh;
   render2d();
 }
 function fitView() {
