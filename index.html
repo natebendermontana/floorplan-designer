@@ -581,6 +581,12 @@ function applyResize(el, role, mx, my, origin, mouseStart) {
       el.angle=Math.atan2(p2y-my,p2x-mx);
       el.x=mx+Math.cos(el.angle)*el.len/2; el.y=my+Math.sin(el.angle)*el.len/2;
     }
+  } else if (el.type==='zone') {
+    const vIdx=parseInt(role.replace('zv',''));
+    if(!isNaN(vIdx) && el.pts && el.pts[vIdx]){
+      el.pts[vIdx].x = snap(origin.pts[vIdx].x+dx);
+      el.pts[vIdx].y = snap(origin.pts[vIdx].y+dy);
+    }
   }
 }
 
@@ -1521,6 +1527,8 @@ canvas2d.addEventListener('mousemove',e=>{
           ? gs2.x - o.w : gs.x;
         el.y = (activeSnapHint && Math.abs(gs2.y-(o.y+o.h+dy))<Math.abs(gs.y-(o.y+dy)))
           ? gs2.y - o.h : gs.y;
+      } else if(el.type==='zone') {
+        el.pts = o.pts.map(p=>({x:snap(p.x+dx), y:snap(p.y+dy)}));
       } else {
         const gs=geometricSnap(snap(o.x+dx), snap(o.y+dy), el);
         el.x=gs.x; el.y=gs.y;
@@ -1846,6 +1854,12 @@ function updateProps() {
     html+=row('Label',inp('pe-label','text',el.label||'','placeholder="Zone name"'));
     html+=row('Vertices',val(`${(el.pts||[]).length} pts`));
     html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
+  }
+  else if(el.type==='zone'){
+    html+=row('Label',inp('pe-label','text',el.label||'','placeholder="Zone name"'));
+    const areaSqFt=polyAreaPx(el.pts||[])/(PX_PER_FT*PX_PER_FT);
+    html+=row('Area',val(areaSqFt.toFixed(1)+' ft²'));
+    html+=row('Vertices',val((el.pts||[]).length+''));
   }
   else if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
   else if(el.type==='roof'){
