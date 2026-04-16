@@ -348,18 +348,14 @@ let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
 // ══════════════════════════════════════════════════
 // LAYOUT
 // ══════════════════════════════════════════════════
-let _resizing = false;
 function resize() {
-  if(_resizing) return; // re-entrance guard
-  _resizing = true;
   const nw = wrap.clientWidth;
   const nh = Math.max(1, wrap.clientHeight - 26);
-  if(canvas2d.width !== nw || canvas2d.height !== nh) {
-    canvas2d.width  = nw;
-    canvas2d.height = nh;
-    render2d();
-  }
-  _resizing = false;
+  if(nw < 1 || nh < 1) return;
+  if(canvas2d.width === nw && canvas2d.height === nh) return;
+  canvas2d.width  = nw;
+  canvas2d.height = nh;
+  render2d();
 }
 function fitView() {
   const lotW = parseFloat(document.getElementById('lot-w')?.value)||100;
@@ -373,10 +369,8 @@ function fitView() {
   viewOY = (canvas2d.height - ph * viewZoom) / 2;
   render2d();
 }
-// Use window resize event — avoids the ResizeObserver feedback loop
-// (ResizeObserver on a flex child fires when its siblings change size,
-// including when render2d updates the sidebar area list)
-window.addEventListener('resize', resize);
+// Resize 2D canvas only on genuine window resize (not on DOM mutations)
+window.addEventListener('resize', ()=>{ setTimeout(resize, 0); });
 
 // ══════════════════════════════════════════════════
 // HELPERS
@@ -2695,10 +2689,16 @@ function initThree(){
   });
 
   // ── Render loop with momentum damping ─────────────────────────
+  let _lastCw=0, _lastCh=0;
   function syncSize(){
     const panel=document.getElementById('panel-3d');
     const cw=panel.clientWidth, ch=Math.max(1,panel.clientHeight-76);
-    if(cw>10&&ch>10){renderer3.setSize(cw,ch);camera3.aspect=cw/ch;camera3.updateProjectionMatrix();}
+    if(cw>10&&ch>10&&(cw!==_lastCw||ch!==_lastCh)){
+      _lastCw=cw; _lastCh=ch;
+      renderer3.setSize(cw,ch);
+      camera3.aspect=cw/ch;
+      camera3.updateProjectionMatrix();
+    }
   }
   syncSize();
 
