@@ -57,7 +57,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 .area-total { display:flex; justify-content:space-between; padding:5px 0 1px; font-size:12px; font-weight:500; border-top:0.5px solid var(--border2); margin-top:2px; }
 #work-area { flex:1; display:flex; overflow:hidden; }
 #canvas-wrap { flex:1; position:relative; overflow:hidden; min-width:0; }
-#fp { display:block; }
+#fp { display:block; width:100%; height:100%; }
 #statusbar { position:absolute; bottom:0; left:0; right:0; height:26px; background:var(--bg); border-top:0.5px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:16px; font-size:11px; color:var(--text2); pointer-events:none; }
 #statusbar span { white-space:nowrap; }
 #st-hint { margin-left:auto; }
@@ -350,7 +350,7 @@ let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
 // ══════════════════════════════════════════════════
 function resize() {
   const nw = wrap.clientWidth;
-  const nh = Math.max(1, wrap.clientHeight - 26);
+  const nh = wrap.clientHeight;   // statusbar is position:absolute, doesn't consume space
   if(nw < 1 || nh < 1) return;
   if(canvas2d.width === nw && canvas2d.height === nh) return;
   canvas2d.width  = nw;
@@ -1341,20 +1341,12 @@ function drawPropertyBoundary() {
   ctx.textAlign = 'left';
 }
 
-let _rafPending = false;
 function render2d() {
-  // Deduplicate: collapse multiple calls per frame into one rAF
-  if (_rafPending) return;
-  _rafPending = true;
-  requestAnimationFrame(() => {
-    _rafPending = false;
-    _doRender2d();
-  });
-}
-function _doRender2d() {
+  ctx.resetTransform(); // ensure clearRect uses device pixels
   ctx.clearRect(0,0,canvas2d.width,canvas2d.height);
   ctx.save();
   ctx.setTransform(viewZoom, 0, 0, viewZoom, viewOX, viewOY);
+  try {
   drawPropertyBoundary();
   drawGrid();
   // Draw layers: hidden layers skipped, other floors dimmed, current floor full
@@ -1435,10 +1427,11 @@ function _doRender2d() {
     ctx.moveTo(sx,sy-11); ctx.lineTo(sx,sy+11); ctx.stroke();
     ctx.restore();
   }
+  } catch(err) { console.error("render2d error:", err); }
   ctx.restore();
   // NOTE: rebuild3d() is NOT called here — it's called explicitly
   // after element mutations (placement, deletion, property changes)
-} // end _doRender2d
+}
 
 // ══════════════════════════════════════════════════
 // HIT TEST  (only hit elements on current floor)
@@ -1582,15 +1575,22 @@ canvas2d.addEventListener('mousedown', e => {
   }
 });
 window.addEventListener('mousemove', e => {
-  if (!midPanning) return;
+  if (!midPanning || !panStart) return;
+  if (!(e.buttons & 1)) { stopPanning(); return; } // mouse button released without mouseup
   const sp = getScreenPos(e);
   viewOX = panOriginX + (sp.x - panStart.x);
   viewOY = panOriginY + (sp.y - panStart.y);
   render2d();
 });
-window.addEventListener('mouseup', e => {
-  if (midPanning) { midPanning = false; canvas2d.style.cursor = spaceDown ? 'grab' : (tool==='select'?'default':'crosshair'); }
-});
+function stopPanning() {
+  if (midPanning) {
+    midPanning = false;
+    canvas2d.style.cursor = spaceDown ? 'grab' : (tool==='select'?'default':'crosshair');
+  }
+}
+window.addEventListener('mouseup',   stopPanning);
+window.addEventListener('mouseleave', stopPanning);
+window.addEventListener('blur',       stopPanning);
 document.addEventListener('keydown', e => {
   if (e.key === ' ' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
     spaceDown = true; canvas2d.style.cursor = 'grab'; e.preventDefault();
