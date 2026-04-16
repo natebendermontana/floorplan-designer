@@ -2460,7 +2460,7 @@ document.getElementById('btn-export-dxf').addEventListener('click',()=>{
 // ══════════════════════════════════════════════════
 let panel3dOpen=false, threeReady=false;
 let renderer3, scene3, camera3, spherical={theta:Math.PI/4,phi:Math.PI/3,radius:35,tx:0,ty:0,tz:0};
-const ROOM_COLORS=[0x4a90d9,0x50c878,0xe8a838,0xd95c5c,0x9b59b6,0x1abc9c,0xe67e22,0x3498db];
+const ROOM_COLORS=[0xA8C4A0,0xC4B888,0xD4A870,0xC48878,0xB0A8C8,0x90B8C0,0xD4B878,0x98B8C8];
 const FUR_COLORS={}; // colors now handled per-ftype in furProps inside rebuild3d
 
 // Panel width state
@@ -2777,6 +2777,40 @@ function rebuild3d(){
   if(!scene3)return;
   const rem=[]; scene3.children.forEach(c=>{if(c.userData.fp)rem.push(c);}); rem.forEach(c=>{scene3.remove(c);if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose();});
 
+  // ── Sketch/watercolor helpers ─────────────────────────────────
+  function blendHex(a,b,t){
+    const ar=(a>>16)&255,ag=(a>>8)&255,ab=a&255;
+    const br=(b>>16)&255,bg=(b>>8)&255,bb=b&255;
+    return(Math.round(ar+(br-ar)*t)<<16)|(Math.round(ag+(bg-ag)*t)<<8)|Math.round(ab+(bb-ab)*t);
+  }
+  function makeToonGrad(hi,mid,shad){
+    const d=new Uint8Array(12);
+    [shad,shad,mid,hi].forEach((c,i)=>{d[i*3]=(c>>16)&255;d[i*3+1]=(c>>8)&255;d[i*3+2]=c&255;});
+    const t=new THREE.DataTexture(d,4,1,THREE.RGBFormat);
+    t.needsUpdate=true;t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestFilter;
+    return t;
+  }
+  function sketchMat(col,opts={}){
+    const mid=blendHex(col,0x8b7355,0.22),shad=blendHex(col,0x3a1e08,0.45);
+    return new THREE.MeshToonMaterial({color:col,gradientMap:makeToonGrad(col,mid,shad),...opts});
+  }
+  function inkOutline(parent,thickness=0.05,col=0x1a0a00){
+    if(!parent.geometry)return;
+    const m=new THREE.Mesh(parent.geometry,
+      new THREE.MeshBasicMaterial({color:col,side:THREE.BackSide}));
+    m.scale.copy(parent.scale).multiplyScalar(1+thickness);
+    m.position.copy(parent.position);m.rotation.copy(parent.rotation);
+    m.userData.fp=true;scene3.add(m);
+  }
+  // Watercolor palette
+  const P={
+    wallG:0xEADEC8,wallU:0xD4C8AC,slab:0xEEE4CC,
+    roof:0xB88C68,roofD:0x9A7050,
+    wood:0xC8904E,darkWood:0x8C5E30,found:0xCCBEA8,
+    glass:0xB8D4E8,door:0x8C6040,frame:0xA07850,knob:0xC8A04A,
+    timber:0xC49050,post:0xA07040,ink:0x1a0a00,
+  };
+
   const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
   const FLOOR_SEP=0.4; // thickness of floor slab between levels
 
@@ -2969,7 +3003,7 @@ function rebuild3d(){
       if(fl===0){
         // Ground floor: translucent colored plane + opaque foundation fill
         // that drops from yBase down to terrain, hiding the slope inside rooms.
-        const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.18}));
+        const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),sketchMat(col,{transparent:true,opacity:0.22}));
         fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
 
         // Foundation fill: opaque concrete slab from yBase down to the lowest
@@ -2980,7 +3014,7 @@ function rebuild3d(){
         const lowestTerrain=Math.min(...corners.map(([x,z])=>slopeOffset(x,z)));
         const foundH=yBase-lowestTerrain+0.1; // how far down we need to fill
         if(foundH>0.1){
-          const foundMat=new THREE.MeshLambertMaterial({color:0xb8b0a0});
+          const foundMat=sketchMat(P.found);
           const found=new THREE.Mesh(new THREE.BoxGeometry(rw,foundH,rh),foundMat);
           found.position.set(rx+rw/2, yBase-foundH/2, rz+rh/2);
           found.receiveShadow=true; addFP(found,fl);
@@ -2995,8 +3029,8 @@ function rebuild3d(){
           return fcx1<el.x+el.w && fcx2>el.x && fcy1<el.y+el.h && fcy2>el.y;
         });
 
-        const slabMat = new THREE.MeshLambertMaterial({color:0xd4cfc4});
-        const baseMat = new THREE.MeshLambertMaterial({color:0xb8864a});
+        const slabMat = sketchMat(P.slab);
+        const baseMat = sketchMat(P.wood);
         // Arrow fn (not function declaration) avoids hoisting issues, closes over yBase/fl correctly
         const addSR = (x3,z3,w3,d3) => {
           if(w3<0.05||d3<0.05) return;
@@ -3028,8 +3062,8 @@ function rebuild3d(){
         // Hardwood planks — skip planks that fall inside a floor-cutout
         const nPlanks=Math.max(3,Math.round(rh/0.25));
         const plankW=rh/nPlanks;
-        const colA=new THREE.MeshLambertMaterial({color:0xc49050});
-        const colB=new THREE.MeshLambertMaterial({color:0xaa7840});
+        const colA=sketchMat(P.wood);
+        const colB=sketchMat(P.darkWood);
         for(let pi=0;pi<nPlanks;pi++){
           // Plank spans full room width in X, steps in Z.
           // Check if this plank's Z band overlaps any cutout's Z range,
@@ -3056,7 +3090,7 @@ function rebuild3d(){
       }
 
       // Four walls — skip any face toggled open
-      const wMat=new THREE.MeshLambertMaterial({color:fl===0?0xcecac0:0xb8d4f0,side:THREE.DoubleSide});
+      const wMat=sketchMat(fl===0?P.wallG:P.wallU,{side:THREE.DoubleSide});
       const wt=0.25;
       const roomW=el.walls||{N:true,S:true,E:true,W:true};
       // Each entry: {key, w, d, x, z}
@@ -3077,7 +3111,7 @@ function rebuild3d(){
           const terrainUnder=slopeOffset(wd.x,wd.z);
           const drop=yBase-terrainUnder; // positive = terrain below floor = we need a stem
           if(drop>0.05){
-            const stemMat=new THREE.MeshLambertMaterial({color:0xb0a890,side:THREE.DoubleSide});
+            const stemMat=sketchMat(P.found,{side:THREE.DoubleSide});
             const stemH=drop+0.05;
             const stem=new THREE.Mesh(new THREE.BoxGeometry(wd.w,stemH,wd.d+0.02),stemMat);
             stem.position.set(wd.x,yBase-stemH/2,wd.z);stem.castShadow=true;addFP(stem,fl);
@@ -3102,11 +3136,12 @@ function rebuild3d(){
         wCol = el.half ? (fl===0?0xd8c8a0:0xc8d8e8) : (fl===0?0xcecac0:0xb8d4f0);
         wThk = 0.25;
       }
-      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,wThk),new THREE.MeshLambertMaterial({color:wCol,side:THREE.DoubleSide}));
+      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,wThk),sketchMat(wCol,{side:THREE.DoubleSide}));
       m.position.set((x1+x2)/2,yBase+wh3d/2,(z1+z2)/2);
       m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;addFP(m,fl);
+      inkOutline(m,0.035,P.ink);
       if(el.landscape){
-        const cop=new THREE.Mesh(new THREE.BoxGeometry(len+0.06,0.08,wThk+0.1),new THREE.MeshLambertMaterial({color:0xb8b0a0}));
+        const cop=new THREE.Mesh(new THREE.BoxGeometry(len+0.06,0.08,wThk+0.1),sketchMat(P.found));
         cop.position.set((x1+x2)/2,yBase+wh3d+0.04,(z1+z2)/2);
         cop.rotation.y=-Math.atan2(z2-z1,x2-x1);addFP(cop,fl);
       }
@@ -3128,9 +3163,9 @@ function rebuild3d(){
       dGroup.rotation.y = wallAng;
       addFP(dGroup, fl);
 
-      const doorMat  = new THREE.MeshLambertMaterial({color:0x7a5438, side:THREE.DoubleSide});
-      const frameMat = new THREE.MeshLambertMaterial({color:0x9a8060, side:THREE.DoubleSide});
-      const wallFill = new THREE.MeshLambertMaterial({color:0xcecac0, side:THREE.DoubleSide});
+      const doorMat  = sketchMat(P.door,{side:THREE.DoubleSide});
+      const frameMat = sketchMat(P.frame,{side:THREE.DoubleSide});
+      const wallFill = sketchMat(P.wallG,{side:THREE.DoubleSide});
 
       // ── Door panel: full wall thickness so visible from both sides ──
       const dp = new THREE.Mesh(new THREE.BoxGeometry(doorLen, doorH, panelThk), doorMat);
@@ -3140,7 +3175,7 @@ function rebuild3d(){
       dGroup.add(dp);
 
       // Recessed panel details (on front face only, offset forward)
-      const inset = new THREE.MeshLambertMaterial({color:0x5a3c22, side:THREE.DoubleSide});
+      const inset = sketchMat(P.darkWood,{side:THREE.DoubleSide});
       [[doorLen*0.12, doorH*0.55, doorLen*0.76, doorH*0.34],
        [doorLen*0.12, doorH*0.08, doorLen*0.76, doorH*0.28]].forEach(([px,py,pw,ph])=>{
         const panel = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.04), inset);
@@ -3178,7 +3213,7 @@ function rebuild3d(){
       dGroup.add(header);
 
       // ── Knob (both sides) ──
-      const knobMat = new THREE.MeshLambertMaterial({color:0xd4af37});
+      const knobMat = sketchMat(P.knob);
       [panelThk/2 + 0.06, -(panelThk/2 + 0.06)].forEach(kz=>{
         const knob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), knobMat);
         knob.position.set(doorLen * 0.82, doorH * 0.45, kz);
@@ -3198,7 +3233,7 @@ function rebuild3d(){
 
       // Glass pane — MeshBasicMaterial, DoubleSide, renders on top of wall
       const glassMat = new THREE.MeshBasicMaterial({
-        color:0xaad8f0, transparent:true, opacity:0.50,
+        color:P.glass, transparent:true, opacity:0.50,
         side:THREE.DoubleSide, depthWrite:false
       });
       const glass = new THREE.Mesh(new THREE.BoxGeometry(winLen, winH, glassD), glassMat);
@@ -3208,7 +3243,7 @@ function rebuild3d(){
       addFP(glass,fl);
 
       // Frame: same deep slab, opaque white, renders behind glass but in front of wall
-      const fMat = new THREE.MeshBasicMaterial({color:0xf0ede6, side:THREE.DoubleSide});
+      const fMat = sketchMat(P.slab,{side:THREE.DoubleSide});
       // Outer frame box (full depth) — acts as the visible border from both sides
       const frameOuter = new THREE.Mesh(new THREE.BoxGeometry(winLen+0.1, winH+0.1, frameD), fMat);
       frameOuter.renderOrder = 1;
@@ -3264,8 +3299,8 @@ function rebuild3d(){
       roofGroup.visible=!!layerVisible.roof;
       scene3.add(roofGroup);
 
-      const roofMat=new THREE.MeshLambertMaterial({color:0x8a7060,side:THREE.DoubleSide});
-      const ceilMat=new THREE.MeshLambertMaterial({color:0xd4cfc4,side:THREE.DoubleSide});
+      const roofMat=sketchMat(P.roof,{side:THREE.DoubleSide});
+      const ceilMat=sketchMat(P.slab,{side:THREE.DoubleSide});
 
       // Footprint in group-local coords (group centred at rx+rw/2, rz+rh/2)
       const x0=-rw/2-ov, x1=rw/2+ov, z0=-rh/2-ov, z1=rh/2+ov;
@@ -3378,8 +3413,8 @@ function rebuild3d(){
     } else if(el.type==='member'){
       // ── Timber frame member 3D rendering ────────────────────────
       const sw=el.sectionW/12, sh=el.sectionH/12; // section inches → feet
-      const timberMat=new THREE.MeshLambertMaterial({color:0xC68642});
-      const postMat  =new THREE.MeshLambertMaterial({color:0xA0522D});
+      const timberMat=sketchMat(P.timber);
+      const postMat  =sketchMat(P.post);
       const addFM=(mesh)=>{
         mesh.userData.fp=true; mesh.userData.isFrame=true;
         mesh.visible=!!layerVisible.frame; scene3.add(mesh); return mesh;
@@ -3450,7 +3485,7 @@ function rebuild3d(){
       const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
       const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
       const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; if(el.flip)G.scale.x=-1; addFP(G,fl,el);
-      const mat=(col,rough=0.8)=>new THREE.MeshLambertMaterial({color:col});
+      const mat=(col,rough=0.8)=>sketchMat(col);
       const box3=(w,h,d,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col));m.position.set(x,y,z);m.castShadow=true;G.add(m);return m;};
       const cyl3=(r,h,col,x=0,y=0,z=0,segs=12)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,segs),mat(col));m.position.set(x,y,z);G.add(m);return m;};
       const sph3=(r,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),mat(col));m.position.set(x,y,z);G.add(m);return m;};
@@ -3616,7 +3651,7 @@ function rebuild3d(){
         // tray
         box3(fw,0.08,fh,0xd8d8d8,0,0.04,0);
         // glass walls (3 sides, open 1 for entry)
-        const gm=new THREE.MeshLambertMaterial({color:0xb8d8e8,transparent:true,opacity:0.35,side:THREE.DoubleSide});
+        const gm=new THREE.MeshBasicMaterial({color:P.glass,transparent:true,opacity:0.35,side:THREE.DoubleSide});
         for(const[gw,gh,gd,gx,gy,gz] of [[fw,1.9,0.04,0,1.9/2,-fh/2+0.02],[fw,1.9,0.04,0,1.9/2,fh/2-0.02],[0.04,1.9,fh,fw/2-0.02,1.9/2,0]]){
           const gls=new THREE.Mesh(new THREE.BoxGeometry(gw,gh,gd),gm);gls.position.set(gx,gy,gz);G.add(gls);
         }
@@ -3666,7 +3701,7 @@ function rebuild3d(){
         }
 
       } else if(t==='pool'){
-        const pm=new THREE.MeshLambertMaterial({color:0x1a6eb5,transparent:true,opacity:0.85});
+        const pm=new THREE.MeshBasicMaterial({color:0x6aB4D8,transparent:true,opacity:0.75});
         const pool=new THREE.Mesh(new THREE.CylinderGeometry(fw/2,fw/2,0.25,32),pm);
         pool.scale.z=fh/fw; pool.position.set(0,0.125,0); G.add(pool);
         // pool surround
@@ -3674,8 +3709,8 @@ function rebuild3d(){
         rim.scale.z=fh/fw; rim.position.set(0,0.04,0); G.add(rim);
 
       } else if(t==='hot-tub'){
-        box3(fw,0.5,fh,0xd8c8a0,0,0.25,0);
-        const inner=new THREE.MeshLambertMaterial({color:0x2090c8,transparent:true,opacity:0.8});
+        box3(fw,0.5,fh,0xD4C4A0,0,0.25,0);
+        const inner=new THREE.MeshBasicMaterial({color:0x7aC4E8,transparent:true,opacity:0.7});
         const ht=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.4,fw*0.4,0.35,20),inner);
         ht.scale.z=fh/fw; ht.position.set(0,0.35,0); G.add(ht);
         // jets
@@ -3684,19 +3719,19 @@ function rebuild3d(){
       } else if(t==='tree'){
         const tr=Math.min(fw,fh)/2;
         // trunk
-        cyl3(tr*0.15,tr*0.9,0x7a4a20,0,tr*0.45,0);
+        cyl3(tr*0.15,tr*0.9,0x8C6030,0,tr*0.45,0);
         // canopy layers
-        for(const[r,y,col] of [[tr*0.9,tr*0.9+0.1,0x1a7a1a],[tr*0.72,tr*1.25,0x228b22],[tr*0.5,tr*1.55,0x2da82d]]){
+        for(const[r,y,col] of [[tr*0.9,tr*0.9+0.1,0x6A9840],[tr*0.72,tr*1.25,0x7AAA50],[tr*0.5,tr*1.55,0x8ABE60]]){
           const cm=new THREE.Mesh(new THREE.ConeGeometry(r,r*0.9,12),mat(col));
           cm.position.set(0,y,0); G.add(cm);
         }
 
       } else if(t==='shrub'){
-        cyl3(Math.min(fw,fh)*0.12,Math.min(fw,fh)*0.25,0x7a5020,0,Math.min(fw,fh)*0.125,0);
-        const nr=4;
-        for(let i=0;i<nr;i++){const a=i*Math.PI*2/nr;const r=Math.min(fw,fh)*0.32;sph3(r*0.5,0x1e8c2e,Math.cos(a)*r*0.55,r*0.4,Math.sin(a)*r*0.55);}
-        sph3(Math.min(fw,fh)*0.35,0x22a030,0,Math.min(fw,fh)*0.5,0);
-
+        const sr=Math.min(fw,fh)/2;
+        for(const[x,z,r,col] of [[0,0,sr*0.78,0x8AB84A],[-sr*0.36,-sr*0.22,sr*0.52,0x78A83A],[sr*0.30,-sr*0.16,sr*0.48,0x9AC85A]]){
+          const sm=new THREE.Mesh(new THREE.SphereGeometry(r,8,6),sketchMat(col));
+          sm.position.set(x,r*0.65,z); G.add(sm);
+        }
       } else if(t==='garden-bed'){
         box3(fw,0.18,fh,0x6b3d12,0,0.09,0); // soil
         const nPlants=Math.max(2,Math.round(fw/0.5));
@@ -3922,12 +3957,7 @@ function rebuild3d(){
   }
   terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
 
-  const terrainMat=new THREE.MeshStandardMaterial({
-    vertexColors:true,
-    roughness:0.92,
-    metalness:0.0,
-    side:THREE.FrontSide,
-  });
+  const terrainMat=new THREE.MeshToonMaterial({vertexColors:true,side:THREE.FrontSide});
   const grass=new THREE.Mesh(terrainGeo, terrainMat);
   grass.receiveShadow=true; grass.userData.fp=true; scene3.add(grass);
 
@@ -3935,13 +3965,13 @@ function rebuild3d(){
   let minTerrainY=0;
   for(let i=0;i<vCount;i++) minTerrainY=Math.min(minTerrainY, pos2.getY(i));
   const dirtDepth=Math.max(4, Math.abs(minTerrainY)+2);
-  const dirtMat=new THREE.MeshStandardMaterial({color:0x3a2a18, roughness:1.0, metalness:0.0});
+  const dirtMat=sketchMat(0x6a4830);
   const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW, dirtDepth, lotSD), dirtMat);
   dirt.position.set((lotX1+lotX2)/2, minTerrainY-dirtDepth/2, (lotZ1+lotZ2)/2);
   dirt.userData.fp=true; scene3.add(dirt);
 
   // Lot boundary edge — thin dark curb at the perimeter to give a clean termination
-  const edgeMat=new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:0.9,metalness:0.05});
+  const edgeMat=sketchMat(0x4a3820);
   const edgeH=0.15, edgeT=0.15;
   const lotCX=(lotX1+lotX2)/2, lotCZ=(lotZ1+lotZ2)/2;
   // N edge (z=lotZ1), S edge (z=lotZ2), W edge (x=lotX1), E edge (x=lotX2)
