@@ -348,19 +348,18 @@ let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
 // ══════════════════════════════════════════════════
 // LAYOUT
 // ══════════════════════════════════════════════════
-let _resizeTimer = null;
+let _resizing = false;
 function resize() {
-  // Debounce: wait for layout to settle before resizing canvas
-  if(_resizeTimer) cancelAnimationFrame(_resizeTimer);
-  _resizeTimer = requestAnimationFrame(()=>{
-    _resizeTimer = null;
-    const nw = wrap.clientWidth;
-    const nh = Math.max(1, wrap.clientHeight - 26);
-    if(canvas2d.width === nw && canvas2d.height === nh) return;
-    canvas2d.width = nw;
+  if(_resizing) return; // re-entrance guard
+  _resizing = true;
+  const nw = wrap.clientWidth;
+  const nh = Math.max(1, wrap.clientHeight - 26);
+  if(canvas2d.width !== nw || canvas2d.height !== nh) {
+    canvas2d.width  = nw;
     canvas2d.height = nh;
     render2d();
-  });
+  }
+  _resizing = false;
 }
 function fitView() {
   const lotW = parseFloat(document.getElementById('lot-w')?.value)||100;
@@ -374,7 +373,10 @@ function fitView() {
   viewOY = (canvas2d.height - ph * viewZoom) / 2;
   render2d();
 }
-new ResizeObserver(resize).observe(wrap);
+// Use window resize event — avoids the ResizeObserver feedback loop
+// (ResizeObserver on a flex child fires when its siblings change size,
+// including when render2d updates the sidebar area list)
+window.addEventListener('resize', resize);
 
 // ══════════════════════════════════════════════════
 // HELPERS
