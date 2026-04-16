@@ -1426,7 +1426,8 @@ function render2d() {
     ctx.restore();
   }
   ctx.restore();
-  if (panel3dOpen) rebuild3d();
+  // NOTE: rebuild3d() is NOT called here — it's called explicitly
+  // after element mutations (placement, deletion, property changes)
 }
 
 // ══════════════════════════════════════════════════
@@ -1613,6 +1614,7 @@ canvas2d.addEventListener('mousedown',e=>{
       zonePts=[]; zonePreviewPt=null;
       switchToSelect(elements[elements.length-1]);
       renderAndAreas();
+      if(panel3dOpen) rebuild3d();
     } else {
       zonePts.push({x:sp.x,y:sp.y});
       render2d();
@@ -1771,7 +1773,9 @@ canvas2d.addEventListener('mouseup',e=>{
     }
   }
   drawing=false;previewStart=null;previewEnd=null;
-  document.getElementById('st-dim').textContent='';renderAndAreas();
+  document.getElementById('st-dim').textContent='';
+  renderAndAreas();
+  if(panel3dOpen) rebuild3d();
 });
 
 canvas2d.addEventListener('dblclick', e => {
@@ -1820,7 +1824,7 @@ function updateProps() {
   const pane=document.getElementById('prop-content');
   if(multiSel.length>1){
     pane.innerHTML=`<div style="font-size:12px;color:var(--text2)">${multiSel.length} items selected</div><button class="del-btn" id="pe-del-multi">Delete all</button>`;
-    document.getElementById('pe-del-multi').addEventListener('click',()=>{saveHistory();elements=elements.filter(e=>!multiSel.includes(e));multiSel=[];selected=null;updateProps();renderAndAreas();});return;
+    document.getElementById('pe-del-multi').addEventListener('click',()=>{saveHistory();elements=elements.filter(e=>!multiSel.includes(e));multiSel=[];selected=null;updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();});return;
   }
   if(!selected){pane.innerHTML='<span style="color:var(--text3)">Nothing selected</span>';return;}
   const el=selected;
@@ -2000,8 +2004,8 @@ function updateProps() {
       if(panel3dOpen)rebuild3d();
     });
   });
-  bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();});
-  document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();renderAndAreas();});
+  bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();if(panel3dOpen)rebuild3d();});
+  document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();});
 }
 
 // ══════════════════════════════════════════════════
@@ -2191,8 +2195,8 @@ document.addEventListener('mousedown', e => {
 // ══════════════════════════════════════════════════
 // TOPBAR ACTIONS
 // ══════════════════════════════════════════════════
-document.getElementById('btn-undo').addEventListener('click',()=>{if(history.length){elements=history.pop();selected=null;multiSel=[];updateProps();renderAndAreas();}});
-document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();renderAndAreas();}});
+document.getElementById('btn-undo').addEventListener('click',()=>{if(history.length){elements=history.pop();selected=null;multiSel=[];updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();}}); 
+document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();}});
 // ── Save / Load system ──────────────────────────────────────────────────────
 const LS_KEY = 'fp_plans_v1';
 const LS_AUTO = 'fp_autosave_v1';
@@ -2226,7 +2230,7 @@ function loadPlanData(data){
   saveHistory();
   elements = (data.elements||[]).map(el=>({...el, floor:el.floor??0}));
   applySettings(data.settings || {pxPerFt:data.pxPerFt, gridFt:data.gridFt});
-  selected=null; multiSel=[]; updateProps(); render2d();
+  selected=null; multiSel=[]; updateProps(); renderAndAreas();
   if(panel3dOpen) rebuild3d();
   markClean();
 }
