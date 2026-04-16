@@ -348,13 +348,19 @@ let rectSelStart = null, rectSelEnd = null, rectSelActive = false;
 // ══════════════════════════════════════════════════
 // LAYOUT
 // ══════════════════════════════════════════════════
+let _resizeTimer = null;
 function resize() {
-  const nw = wrap.clientWidth;
-  const nh = wrap.clientHeight - 26;
-  if(canvas2d.width === nw && canvas2d.height === nh) return; // no change — skip
-  canvas2d.width = nw;
-  canvas2d.height = nh;
-  render2d();
+  // Debounce: wait for layout to settle before resizing canvas
+  if(_resizeTimer) cancelAnimationFrame(_resizeTimer);
+  _resizeTimer = requestAnimationFrame(()=>{
+    _resizeTimer = null;
+    const nw = wrap.clientWidth;
+    const nh = Math.max(1, wrap.clientHeight - 26);
+    if(canvas2d.width === nw && canvas2d.height === nh) return;
+    canvas2d.width = nw;
+    canvas2d.height = nh;
+    render2d();
+  });
 }
 function fitView() {
   const lotW = parseFloat(document.getElementById('lot-w')?.value)||100;
@@ -466,6 +472,11 @@ function saveHistory() {
   history.push(JSON.parse(JSON.stringify(elements)));
   markDirty();
   if (history.length > 60) history.shift();
+}
+// Call after any element mutation: re-renders AND updates area list
+function renderAndAreas() {
+  render2d();
+  updateAreas();
 }
 
 // ══════════════════════════════════════════════════
@@ -1419,7 +1430,6 @@ function render2d() {
     ctx.restore();
   }
   ctx.restore();
-  updateAreas();
   if (panel3dOpen) rebuild3d();
 }
 
@@ -1606,7 +1616,7 @@ canvas2d.addEventListener('mousedown',e=>{
       elements.push({type:'zone',pts:[...zonePts],label:'',floor:currentFloor});
       zonePts=[]; zonePreviewPt=null;
       switchToSelect(elements[elements.length-1]);
-      render2d();
+      renderAndAreas();
     } else {
       zonePts.push({x:sp.x,y:sp.y});
       render2d();
@@ -1765,7 +1775,7 @@ canvas2d.addEventListener('mouseup',e=>{
     }
   }
   drawing=false;previewStart=null;previewEnd=null;
-  document.getElementById('st-dim').textContent='';render2d();
+  document.getElementById('st-dim').textContent='';renderAndAreas();
 });
 
 canvas2d.addEventListener('dblclick', e => {
@@ -1814,7 +1824,7 @@ function updateProps() {
   const pane=document.getElementById('prop-content');
   if(multiSel.length>1){
     pane.innerHTML=`<div style="font-size:12px;color:var(--text2)">${multiSel.length} items selected</div><button class="del-btn" id="pe-del-multi">Delete all</button>`;
-    document.getElementById('pe-del-multi').addEventListener('click',()=>{saveHistory();elements=elements.filter(e=>!multiSel.includes(e));multiSel=[];selected=null;updateProps();render2d();});return;
+    document.getElementById('pe-del-multi').addEventListener('click',()=>{saveHistory();elements=elements.filter(e=>!multiSel.includes(e));multiSel=[];selected=null;updateProps();renderAndAreas();});return;
   }
   if(!selected){pane.innerHTML='<span style="color:var(--text3)">Nothing selected</span>';return;}
   const el=selected;
@@ -1995,7 +2005,7 @@ function updateProps() {
     });
   });
   bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();});
-  document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();render2d();});
+  document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();renderAndAreas();});
 }
 
 // ══════════════════════════════════════════════════
@@ -2185,8 +2195,8 @@ document.addEventListener('mousedown', e => {
 // ══════════════════════════════════════════════════
 // TOPBAR ACTIONS
 // ══════════════════════════════════════════════════
-document.getElementById('btn-undo').addEventListener('click',()=>{if(history.length){elements=history.pop();selected=null;multiSel=[];updateProps();render2d();}});
-document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();render2d();}});
+document.getElementById('btn-undo').addEventListener('click',()=>{if(history.length){elements=history.pop();selected=null;multiSel=[];updateProps();renderAndAreas();}});
+document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();renderAndAreas();}});
 // ── Save / Load system ──────────────────────────────────────────────────────
 const LS_KEY = 'fp_plans_v1';
 const LS_AUTO = 'fp_autosave_v1';
@@ -2399,8 +2409,8 @@ document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
   if((e.metaKey||e.ctrlKey)&&e.key==='z'){document.getElementById('btn-undo').click();return;}
   if(e.key==='Delete'||e.key==='Backspace'){
-    if(multiSel.length>1){saveHistory();elements=elements.filter(x=>!multiSel.includes(x));multiSel=[];selected=null;updateProps();render2d();}
-    else if(selected){saveHistory();elements=elements.filter(x=>x!==selected);selected=null;updateProps();render2d();}
+    if(multiSel.length>1){saveHistory();elements=elements.filter(x=>!multiSel.includes(x));multiSel=[];selected=null;updateProps();renderAndAreas();}
+    else if(selected){saveHistory();elements=elements.filter(x=>x!==selected);selected=null;updateProps();renderAndAreas();}
   }
   if(e.key==='Escape'){
     if(zonePts.length>0){zonePts=[];zonePreviewPt=null;render2d();return;}
