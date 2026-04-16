@@ -1341,7 +1341,17 @@ function drawPropertyBoundary() {
   ctx.textAlign = 'left';
 }
 
+let _rafPending = false;
 function render2d() {
+  // Deduplicate: collapse multiple calls per frame into one rAF
+  if (_rafPending) return;
+  _rafPending = true;
+  requestAnimationFrame(() => {
+    _rafPending = false;
+    _doRender2d();
+  });
+}
+function _doRender2d() {
   ctx.clearRect(0,0,canvas2d.width,canvas2d.height);
   ctx.save();
   ctx.setTransform(viewZoom, 0, 0, viewZoom, viewOX, viewOY);
@@ -1428,7 +1438,7 @@ function render2d() {
   ctx.restore();
   // NOTE: rebuild3d() is NOT called here — it's called explicitly
   // after element mutations (placement, deletion, property changes)
-}
+} // end _doRender2d
 
 // ══════════════════════════════════════════════════
 // HIT TEST  (only hit elements on current floor)
