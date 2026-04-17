@@ -2661,8 +2661,8 @@ function initThree(){
   camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
   updateCam3();
   // Physically-based lighting for MeshStandardMaterial
-  scene3.add(new THREE.AmbientLight(0xf5e8c8, 0.9)); // warm paper ambient
-  const sun=new THREE.DirectionalLight(0xffe0a0, 2.0); // golden sketch sun
+  scene3.add(new THREE.AmbientLight(0xf5e8c8, 0.6)); // warm paper ambient — low enough for toon contrast
+  const sun=new THREE.DirectionalLight(0xffe0a0, 1.8); // golden sketch sun
   sun.position.set(-30, 55, 20); // upper-left like hand drawings
   sun.castShadow=true;
   sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
@@ -2889,9 +2889,12 @@ function rebuild3d(){
     return t;
   }
   function sketchMat(col,opts={}){
-    // Toon gradient: highlight=col, midtone=20% darker warm, shadow=50% dark warm
-    const mid=blendHex(col,0x6b4a20,0.25),shad=blendHex(col,0x2a1206,0.55);
-    return new THREE.MeshToonMaterial({color:col,gradientMap:makeToonGrad(col,mid,shad),...opts});
+    // 3-step toon: hi=col slightly warm, mid=30% darker, shad=65% darker
+    // This ensures lit faces show color and shadow faces are clearly dark
+    const hi =blendHex(col,0xFFEED0,0.08);  // tiny warm highlight
+    const mid=blendHex(col,0x2a1206,0.30);  // 30% darker for mid
+    const shad=blendHex(col,0x0a0500,0.65); // 65% darker for shadow
+    return new THREE.MeshToonMaterial({color:hi,gradientMap:makeToonGrad(hi,mid,shad),...opts});
   }
   function inkOutline(parent,thickness=0.05,col=0x1a0a00){
     if(!parent.geometry)return;
@@ -2904,13 +2907,23 @@ function rebuild3d(){
     m.userData.floorNum=parent.userData.floorNum;
     scene3.add(m);
   }
-  // Watercolor palette
+  // Watercolor palette — all colors >80 delta from background 0xF2EAD8
   const P={
-    wallG:0xEADEC8,wallU:0xD4C8AC,slab:0xEEE4CC,
-    roof:0xB88C68,roofD:0x9A7050,
-    wood:0xC8904E,darkWood:0x8C5E30,found:0xCCBEA8,
-    glass:0xB8D4E8,door:0x8C6040,frame:0xA07850,knob:0xC8A04A,
-    timber:0xC49050,post:0xA07040,ink:0x1a0a00,
+    wallG:0xD4B896,  // warm ochre — ground floor walls
+    wallU:0xC4A882,  // slightly deeper — upper floor
+    slab: 0xC8B898,  // warm stone floor slab
+    roof: 0xB07850,  // terracotta roof
+    roofD:0x8C5C38,  // dark terracotta ridge
+    wood: 0xC8904E,  // honey wood planks
+    darkWood:0x8C5E30, // dark wood trim
+    found:0xAA9070,  // foundation stone
+    glass:0x88B8D8,  // window glass — blue-gray
+    door: 0x7A5030,  // warm brown door
+    frame:0x9A7050,  // door/window frame
+    knob: 0xC8A030,  // brass knob
+    timber:0xB47830, // timber frame
+    post:  0x9A6030, // timber post
+    ink:   0x1A0A00, // ink outline
   };
 
   const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
@@ -3105,7 +3118,7 @@ function rebuild3d(){
       if(fl===0){
         // Ground floor: translucent colored plane + opaque foundation fill
         // that drops from yBase down to terrain, hiding the slope inside rooms.
-        const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),sketchMat(col,{transparent:true,opacity:0.22}));
+        const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),sketchMat(col,{transparent:true,opacity:0.45}));
         fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
 
         // Foundation fill: opaque concrete slab from yBase down to the lowest
@@ -3208,6 +3221,7 @@ function rebuild3d(){
         // Above-ground wall
         const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
         m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;addFP(m,fl);
+        inkOutline(m,0.04,P.ink); // ink edge on room walls
         // Stem wall: extend below yBase on downhill sides (where terrain is below floor)
         if(fl===0){
           const terrainUnder=slopeOffset(wd.x,wd.z);
@@ -3232,10 +3246,10 @@ function rebuild3d(){
       const len=Math.hypot(x2-x1,z2-z1); if(len<0.05)continue;
       let wh3d, wCol, wThk;
       if(el.landscape){
-        wh3d=0.75; wCol=0xA89070; wThk=0.3;
+        wh3d=0.75; wCol=0x887050; wThk=0.3; // landscape wall darker
       } else {
         wh3d = el.half ? wallH*0.5 : wallH;
-        wCol = el.half ? (fl===0?0xDDD0B4:0xC8D4C0) : (fl===0?0xEADEC8:0xD4C8AC);
+        wCol = el.half ? (fl===0?0xC8B080:0xB8A070) : (fl===0?0xD4B896:0xC4A882);
         wThk = 0.25;
       }
       const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,wThk),sketchMat(wCol,{side:THREE.DoubleSide}));
@@ -4012,10 +4026,10 @@ function rebuild3d(){
   // Build vertex color array
   const colors=new Float32Array(vCount*3);
   // Watercolor sketch palette — warm sage/ochre terrain
-  const grassCol   ={r:0.76,g:0.82,b:0.58}; // sage watercolor
-  const dryCol     ={r:0.84,g:0.74,b:0.52}; // warm ochre
-  const earthCol   ={r:0.88,g:0.82,b:0.68}; // warm paving/earth
-  const rockCol    ={r:0.72,g:0.67,b:0.58}; // warm stone
+  const grassCol   ={r:0.58,g:0.72,b:0.42}; // medium sage green
+  const dryCol     ={r:0.76,g:0.66,b:0.42}; // warm tan/ochre
+  const earthCol   ={r:0.80,g:0.70,b:0.52}; // warm paving earth
+  const rockCol    ={r:0.62,g:0.57,b:0.48}; // warm grey stone
 
   for(let i=0;i<vCount;i++){
     const vx=pos2.getX(i), vy=pos2.getY(i), vz=pos2.getZ(i);
