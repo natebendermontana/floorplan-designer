@@ -1676,10 +1676,9 @@ window.addEventListener('mousemove', e => {
   render2d();
 });
 function stopPanning() {
-  if (midPanning) {
-    midPanning = false;
-    canvas2d.style.cursor = spaceDown ? 'grab' : (tool==='select'?'default':'crosshair');
-  }
+  midPanning = false;
+  spaceDown = false; // clear stuck space key on any focus loss
+  canvas2d.style.cursor = tool==='select' ? 'default' : 'crosshair';
 }
 window.addEventListener('mouseup',   stopPanning);
 window.addEventListener('mouseleave', stopPanning);
@@ -2662,8 +2661,8 @@ function initThree(){
   camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
   updateCam3();
   // Physically-based lighting for MeshStandardMaterial
-  scene3.add(new THREE.AmbientLight(0xf5e8c8, 1.4)); // warm paper ambient
-  const sun=new THREE.DirectionalLight(0xffe0a0, 1.6); // golden sketch sun
+  scene3.add(new THREE.AmbientLight(0xf5e8c8, 0.9)); // warm paper ambient
+  const sun=new THREE.DirectionalLight(0xffe0a0, 2.0); // golden sketch sun
   sun.position.set(-30, 55, 20); // upper-left like hand drawings
   sun.castShadow=true;
   sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
@@ -2672,8 +2671,11 @@ function initThree(){
   sun.shadow.camera.top=80;   sun.shadow.camera.bottom=-80;
   sun.shadow.bias=-0.001;
   scene3.add(sun);
-  const fill2=new THREE.DirectionalLight(0xd4c8a0, 0.5); // warm fill
+  const fill2=new THREE.DirectionalLight(0xc8b890, 0.3); // warm side fill
   fill2.position.set(25, 20, -15); scene3.add(fill2);
+  // Subtle back light to separate elements from background
+  const back=new THREE.DirectionalLight(0xe8d8c0, 0.15);
+  back.position.set(0, -10, -30); scene3.add(back);
 
   // ── Navigation state ──────────────────────────────────────────
   // vel* = momentum velocity (decays each frame)
@@ -2887,7 +2889,8 @@ function rebuild3d(){
     return t;
   }
   function sketchMat(col,opts={}){
-    const mid=blendHex(col,0x8b7355,0.22),shad=blendHex(col,0x3a1e08,0.45);
+    // Toon gradient: highlight=col, midtone=20% darker warm, shadow=50% dark warm
+    const mid=blendHex(col,0x6b4a20,0.25),shad=blendHex(col,0x2a1206,0.55);
     return new THREE.MeshToonMaterial({color:col,gradientMap:makeToonGrad(col,mid,shad),...opts});
   }
   function inkOutline(parent,thickness=0.05,col=0x1a0a00){
@@ -4008,11 +4011,11 @@ function rebuild3d(){
 
   // Build vertex color array
   const colors=new Float32Array(vCount*3);
-  // Base palette
-  const grassCol   ={r:0.22,g:0.38,b:0.16}; // medium lawn green
-  const dryCol     ={r:0.48,g:0.42,b:0.26}; // dry earth/straw
-  const earthCol   ={r:0.32,g:0.24,b:0.16}; // dark soil
-  const rockCol    ={r:0.45,g:0.43,b:0.40}; // grey rock
+  // Watercolor sketch palette — warm sage/ochre terrain
+  const grassCol   ={r:0.76,g:0.82,b:0.58}; // sage watercolor
+  const dryCol     ={r:0.84,g:0.74,b:0.52}; // warm ochre
+  const earthCol   ={r:0.88,g:0.82,b:0.68}; // warm paving/earth
+  const rockCol    ={r:0.72,g:0.67,b:0.58}; // warm stone
 
   for(let i=0;i<vCount;i++){
     const vx=pos2.getX(i), vy=pos2.getY(i), vz=pos2.getZ(i);
@@ -4030,8 +4033,8 @@ function rebuild3d(){
     // Blend: flat areas = grass, steep = earth/rock, building zones = bare earth
     let r,g,b;
     if(inFlat){
-      // Under/near buildings: compacted earth
-      r=earthCol.r; g=earthCol.g; b=earthCol.b;
+      // Under/near buildings: warm paving tone
+      r=0.88; g=0.80; b=0.64;
     } else {
       // Smooth blend: gentle slope=grass, steep=earth transitioning to rock
       const grassT=Math.max(0, 1-slope*3.5);
@@ -4056,7 +4059,7 @@ function rebuild3d(){
   }
   terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
 
-  const terrainMat=new THREE.MeshToonMaterial({vertexColors:true,side:THREE.FrontSide});
+  const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.88,metalness:0.0,side:THREE.FrontSide});
   const grass=new THREE.Mesh(terrainGeo, terrainMat);
   grass.receiveShadow=true; grass.userData.fp=true; scene3.add(grass);
 
@@ -4064,13 +4067,13 @@ function rebuild3d(){
   let minTerrainY=0;
   for(let i=0;i<vCount;i++) minTerrainY=Math.min(minTerrainY, pos2.getY(i));
   const dirtDepth=Math.max(4, Math.abs(minTerrainY)+2);
-  const dirtMat=sketchMat(0x6a4830);
+  const dirtMat=sketchMat(0x8B6840); // warm dirt
   const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW, dirtDepth, lotSD), dirtMat);
   dirt.position.set((lotX1+lotX2)/2, minTerrainY-dirtDepth/2, (lotZ1+lotZ2)/2);
   dirt.userData.fp=true; scene3.add(dirt);
 
   // Lot boundary edge — thin dark curb at the perimeter to give a clean termination
-  const edgeMat=sketchMat(0x4a3820);
+  const edgeMat=sketchMat(0x6B5840); // warm edge curb
   const edgeH=0.15, edgeT=0.15;
   const lotCX=(lotX1+lotX2)/2, lotCZ=(lotZ1+lotZ2)/2;
   // N edge (z=lotZ1), S edge (z=lotZ2), W edge (x=lotX1), E edge (x=lotX2)
