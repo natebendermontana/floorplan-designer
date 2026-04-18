@@ -77,21 +77,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 .tool-tile:hover { background:var(--bg2); color:var(--text); border-color:var(--border2); }
 .tool-tile.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500; }
 .tool-tile svg { width:14px; height:14px; flex-shrink:0; }
-#panel-3d { width:0; flex-shrink:0; background:#12121f; border-left:0.5px solid var(--border); display:flex; flex-direction:column; overflow:hidden; transition:none; position:relative; }
-#panel-3d.open { width:420px; }
-#panel-3d.fullscreen { position:fixed; inset:0; width:100vw !important; height:100vh !important; z-index:1000; border:none; }
-#panel-3d-resizer { position:absolute; left:0; top:0; bottom:0; width:5px; cursor:ew-resize; background:transparent; z-index:10; }
-#panel-3d-resizer:hover, #panel-3d-resizer.dragging { background:rgba(59,130,246,0.5); }
-#panel-3d-header { height:36px; display:flex; align-items:center; justify-content:space-between; padding:0 8px 0 14px; border-bottom:0.5px solid rgba(255,255,255,0.08); flex-shrink:0; gap:6px; }
-#panel-3d-header .ph-title { font-size:12px; color:rgba(255,255,255,0.65); font-weight:500; }
-#panel-3d-header .ph-hint { font-size:11px; color:rgba(255,255,255,0.3); flex:1; }
 .ph-btn { padding:3px 7px; border:0.5px solid rgba(255,255,255,0.2); border-radius:5px; background:transparent; color:rgba(255,255,255,0.5); font-size:11px; cursor:pointer; white-space:nowrap; }
 .ph-btn:hover { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.85); }
-#three-canvas { flex:1; display:block; width:100%; }
-#panel-3d-footer { padding:7px 10px; border-top:0.5px solid rgba(255,255,255,0.08); display:flex; align-items:center; gap:8px; flex-shrink:0; }
-#panel-3d-footer label { font-size:11px; color:rgba(255,255,255,0.4); white-space:nowrap; }
 #wall-height-input { width:52px; padding:3px 6px; border:0.5px solid rgba(255,255,255,0.18); border-radius:var(--radius); background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.8); font-size:11px; }
-#panel-3d-footer .auto-note { font-size:11px; color:rgba(255,255,255,0.25); margin-left:auto; }
 .floor-btn { padding:3px 8px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text2); font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
 .floor-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500; }
 .layer-btn { padding:3px 8px; border:0.5px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--text2); font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
@@ -155,7 +143,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <div class="tb-sep"></div>
   <div id="area-badge">&#x25a1; <strong id="total-area">0</strong> ft²</div>
   <div class="tb-sep"></div>
-  <button class="tb-btn" id="btn-toggle-3d" title="Toggle 3D preview"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3.5v5L8 14l-6-3.5v-5z"/><path d="M8 2v12M2 5.5l6 3.5 6-3.5"/></svg>3D</button>
   <div class="tb-sep"></div>
   <button class="tb-icon" id="btn-fit" title="Fit to view (Home)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
   <button class="tb-icon" id="btn-zoom-in"  title="Zoom in (+)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="4" y1="7" x2="10" y2="7"/><line x1="11" y1="11" x2="14" y2="14"/></svg></button>
@@ -204,6 +191,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
         <div class="prop-label">Snap grid (ft)</div>
         <input class="prop-input" type="number" id="grid-input" value="1" min="0.5" max="5" step="0.5">
       </div>
+      <div class="prop-row">
+        <div class="prop-label">Wall height (ft)</div>
+        <input class="prop-input" type="number" id="wall-height-input" value="9" min="6" max="20" step="0.5">
+      </div>
     </div>
   </div>
   <div id="work-area">
@@ -216,42 +207,12 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
         <span id="st-hint">Click · drag to move · handles to resize/rotate</span>
       </div>
     </div>
-    <div id="panel-3d">
-      <div id="panel-3d-resizer"></div>
-      <div id="panel-3d-header">
-        <span class="ph-title">3D Preview</span>
-        <span class="ph-hint">Drag to orbit · right-drag to pan · scroll to zoom · double-click to fit</span>
-        <span style="font-size:9px;color:rgba(255,255,255,0.4)">Show</span>
-        <button class="ph-btn" id="vis-fl-0" title="Toggle ground floor">G</button>
-        <button class="ph-btn" id="vis-fl-1" title="Toggle upper floor">U</button>
-        <button class="ph-btn" id="vis-roof" title="Toggle roof">R</button>
-        <button class="ph-btn" id="vis-frame" title="Toggle timber frame">F</button>
-        <button class="ph-btn" id="vis-outdoor" title="Toggle outdoor">O</button>
-        <button class="ph-btn" id="btn-3d-wider" title="Wider">&#x2190;&#x2192;</button>
-        <button class="ph-btn" id="btn-3d-narrower" title="Narrower">&#x2192;&#x2190;</button>
-        <button class="ph-btn" id="btn-3d-fullscreen" title="Fullscreen">&#x26F6;</button>
-      </div>
-      <canvas id="three-canvas"></canvas>
-      <div id="panel-3d-footer">
-        <label>Wall ht</label>
-        <input type="number" id="wall-height-input" value="9" min="6" max="20" step="0.5" style="width:44px">
-        <span style="width:0.5px;height:14px;background:rgba(255,255,255,0.15);margin:0 2px;flex-shrink:0"></span>
-        <label style="white-space:nowrap">Lo (ft)</label>
-        <input type="number" id="slope-low-input"  value="0"  min="-50" max="200" step="0.5" style="width:44px" title="Terrain height at low side (ft)">
-        <label style="white-space:nowrap">Hi (ft)</label>
-        <input type="number" id="slope-high-input" value="0"  min="-50" max="200" step="0.5" style="width:44px" title="Terrain height at high side (ft)">
-        <select id="slope-dir-input" style="padding:3px 4px;border:0.5px solid rgba(255,255,255,0.18);border-radius:5px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.75);font-size:10px;width:52px" title="Which edge is the high side">
-          <option value="N">Hi=N</option>
-          <option value="S">Hi=S</option>
-          <option value="E" selected>Hi=E</option>
-          <option value="W">Hi=W</option>
-        </select>
-      </div>
-    </div>
   </div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+// ══════════════════════════════════════════════════
+// STATE
+// ═════════════════════════════
 // ══════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════
@@ -312,19 +273,9 @@ function toggleLayerVisible(layer) {
   document.querySelectorAll('.vis-btn').forEach(b => {
     b.classList.toggle('active', !!layerVisible[layerKey(b.dataset.vis)]);
   });
-  syncVis3dBtns();
-  applyFloorVisibility();
   render2d();
 }
 
-function syncVis3dBtns() {
-  [{id:'vis-fl-0',key:0},{id:'vis-fl-1',key:1},{id:'vis-roof',key:'roof'},{id:'vis-frame',key:'frame'},{id:'vis-outdoor',key:'outdoor'}].forEach(({id,key})=>{
-    const b = document.getElementById(id);
-    if (!b) return;
-    b.style.opacity    = layerVisible[key] ? '1' : '0.35';
-    b.style.background = layerVisible[key] ? 'rgba(255,255,255,0.15)' : 'transparent';
-  });
-}
 let selected = null;
 let multiSel = [];
 let tool = 'select';
@@ -1508,8 +1459,6 @@ function render2d() {
   }
   } catch(err) { console.error("render2d error:", err); }
   ctx.restore();
-  // NOTE: rebuild3d() is NOT called here — it's called explicitly
-  // after element mutations (placement, deletion, property changes)
 }
 
 // ══════════════════════════════════════════════════
@@ -1716,7 +1665,6 @@ canvas2d.addEventListener('mousedown',e=>{
       zonePts=[]; zonePreviewPt=null;
       switchToSelect(elements[elements.length-1]);
       renderAndAreas();
-      if(panel3dOpen) rebuild3d();
     } else {
       zonePts.push({x:sp.x,y:sp.y});
       render2d();
@@ -1834,7 +1782,7 @@ canvas2d.addEventListener('mouseup',e=>{
   const{x,y}=getPos(e);
   if(tool==='rect-select'&&rectSelActive){rectSelActive=false;rectSelect();rectSelStart=null;rectSelEnd=null;render2d();return;}
   if(activeHandle){saveHistory();activeHandle=null;render2d();return;}
-  if(dragEl){saveHistory();dragEl=null;dragStart=null;dragMultiOrigins=null;activeSnapHint=null;renderAndAreas();if(panel3dOpen)rebuild3d();return;}
+  if(dragEl){saveHistory();dragEl=null;dragStart=null;dragMultiOrigins=null;activeSnapHint=null;renderAndAreas();return;}
   if(!drawing)return;
   const sp=snapPt(x,y);
   if(tool==='wall'||tool==='half-wall'||tool==='landscape-wall'){
@@ -1877,7 +1825,6 @@ canvas2d.addEventListener('mouseup',e=>{
   drawing=false;previewStart=null;previewEnd=null;
   document.getElementById('st-dim').textContent='';
   renderAndAreas();
-  if(panel3dOpen) rebuild3d();
 });
 
 canvas2d.addEventListener('dblclick', e => {
@@ -1892,7 +1839,6 @@ canvas2d.addEventListener('dblclick', e => {
     zonePts=[]; zonePreviewPt=null;
     switchToSelect(elements[elements.length-1]);
     renderAndAreas();
-    if(panel3dOpen) rebuild3d();
   }
 });
 
@@ -1927,7 +1873,7 @@ function updateProps() {
   const pane=document.getElementById('prop-content');
   if(multiSel.length>1){
     pane.innerHTML=`<div style="font-size:12px;color:var(--text2)">${multiSel.length} items selected</div><button class="del-btn" id="pe-del-multi">Delete all</button>`;
-    document.getElementById('pe-del-multi').addEventListener('click',()=>{saveHistory();elements=elements.filter(e=>!multiSel.includes(e));multiSel=[];selected=null;updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();});return;
+    document.getElementById('pe-del-multi').addEventListener('click',()=>{saveHistory();elements=elements.filter(e=>!multiSel.includes(e));multiSel=[];selected=null;updateProps();renderAndAreas();});return;
   }
   if(!selected){pane.innerHTML='<span style="color:var(--text3)">Nothing selected</span>';return;}
   const el=selected;
@@ -2051,44 +1997,41 @@ function updateProps() {
   const bind=(id,fn)=>{const e2=document.getElementById(id);if(e2)e2.addEventListener('input',fn);};
   bind('pe-thick',e=>{el.thickness=parseInt(e.target.value)||8;render2d();});
   bind('pe-half',e=>{el.half=e.target.value==='1';render2d();});
-  bind('pe-fixedelev',e=>{el.fixedElev=e.target.value==='1';if(panel3dOpen)rebuild3d();});
+  bind('pe-fixedelev',e=>{el.fixedElev=e.target.value==='1';});
   bind('pe-len',e=>{el.len=parseFloat(e.target.value)*PX_PER_FT;render2d();});
   bind('pe-fw',e=>{el.fw=parseFloat(e.target.value)||1;render2d();});
   bind('pe-fh',e=>{el.fh=parseFloat(e.target.value)||1;render2d();});
   bind('pe-angle',e=>{el.angle=parseInt(e.target.value)*Math.PI/180;render2d();});
   bind('pe-dtype',e=>{el.dtype=e.target.value;render2d();});
   bind('pe-wtype',e=>{el.wtype=e.target.value;render2d();});
-  bind('pe-winh', e=>{const v=parseFloat(e.target.value); el.winH = isNaN(v)||v<=0 ? undefined : v; if(panel3dOpen)rebuild3d();});
-  bind('pe-sillh',e=>{const v=parseFloat(e.target.value); el.sillH= isNaN(v)||v<0  ? undefined : v; if(panel3dOpen)rebuild3d();});
+  bind('pe-winh', e=>{const v=parseFloat(e.target.value); el.winH = isNaN(v)||v<=0 ? undefined : v;});
+  bind('pe-sillh',e=>{const v=parseFloat(e.target.value); el.sillH= isNaN(v)||v<0  ? undefined : v;});
   bind('pe-label',e=>{el.label=e.target.value;render2d();});
   bind('pe-section',e=>{
     if(e.target.value!=='custom'){const [w,h]=e.target.value.split('x').map(Number);el.sectionW=w;el.sectionH=h;}
-    updateProps();render2d();if(panel3dOpen)rebuild3d();
+    updateProps();render2d();
   });
-  bind('pe-secw',e=>{el.sectionW=parseInt(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
-  bind('pe-sech',e=>{el.sectionH=parseInt(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
-  bind('pe-mheight',e=>{const v=parseFloat(e.target.value);el.memberHeight=isNaN(v)?null:v;if(panel3dOpen)rebuild3d();});
-  bind('pe-melev',e=>{const v=parseFloat(e.target.value);el.memberElev=isNaN(v)?null:v;if(panel3dOpen)rebuild3d();});
-  bind('pe-rtype',e=>{el.rtype=e.target.value;updateProps();render2d();if(panel3dOpen)rebuild3d();});
-  bind('pe-pitch',e=>{el.pitch=parseFloat(e.target.value)||6;render2d();if(panel3dOpen)rebuild3d();});
-  bind('pe-ridgedir',e=>{el.ridgeDir=e.target.value;render2d();if(panel3dOpen)rebuild3d();});
-  bind('pe-overhang',e=>{el.overhang=parseFloat(e.target.value)??1;render2d();if(panel3dOpen)rebuild3d();});
+  bind('pe-secw',e=>{el.sectionW=parseInt(e.target.value)||6;render2d();});
+  bind('pe-sech',e=>{el.sectionH=parseInt(e.target.value)||6;render2d();});
+  bind('pe-mheight',e=>{const v=parseFloat(e.target.value);el.memberHeight=isNaN(v)?null:v;});
+  bind('pe-melev',e=>{const v=parseFloat(e.target.value);el.memberElev=isNaN(v)?null:v;});
+  bind('pe-rtype',e=>{el.rtype=e.target.value;updateProps();render2d();});
+  bind('pe-pitch',e=>{el.pitch=parseFloat(e.target.value)||6;render2d();});
+  bind('pe-ridgedir',e=>{el.ridgeDir=e.target.value;render2d();});
+  bind('pe-overhang',e=>{el.overhang=parseFloat(e.target.value)??1;render2d();});
   bind('pe-elevation',e=>{
     const v=parseFloat(e.target.value);
     el.elevation = isNaN(v) ? undefined : v;
-    if(panel3dOpen) rebuild3d();
   });
   bind('pe-followterrain',e=>{
     const v=e.target.value==='1';
     // Only store if different from default (keeps saves clean)
     if(v===defaultFollowTerrain(el)) delete el.followTerrain;
     else el.followTerrain=v;
-    if(panel3dOpen) rebuild3d();
   });
   bind('pe-cutdepth',e=>{
     const v=parseFloat(e.target.value);
     el.cutDepth = isNaN(v)||v<=0 ? undefined : v;
-    if(panel3dOpen) rebuild3d();
   });
   const _flipBtn=document.getElementById('pe-flip');
   if(_flipBtn) _flipBtn.addEventListener('click',()=>{
@@ -2096,7 +2039,7 @@ function updateProps() {
     _flipBtn.style.background=el.flip?'var(--bg2)':'transparent';
     _flipBtn.style.color=el.flip?'var(--accent)':'var(--text2)';
     _flipBtn.innerHTML=el.flip?'&#x21D4; Flipped':'&#x21D4; Flip';
-    render2d(); if(panel3dOpen)rebuild3d();
+    render2d();
   });
   // Wall face toggle buttons
   ['N','S','E','W'].forEach(key=>{
@@ -2111,11 +2054,10 @@ function updateProps() {
       btn.style.color=open?'var(--text3)':'var(--text)';
       btn.title=open?'Open':'Walled';
       render2d();
-      if(panel3dOpen)rebuild3d();
     });
   });
-  bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();if(panel3dOpen)rebuild3d();});
-  document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();});
+  bind('pe-floor',e=>{el.floor=parseInt(e.target.value);render2d();});
+  document.getElementById('pe-del').addEventListener('click',()=>{saveHistory();elements=elements.filter(x=>x!==el);selected=null;updateProps();renderAndAreas();});
 }
 
 // ══════════════════════════════════════════════════
@@ -2297,9 +2239,9 @@ document.addEventListener('mousedown', e => {
 // ══════════════════════════════════════════════════
 // TOPBAR ACTIONS
 // ══════════════════════════════════════════════════
-document.getElementById('btn-undo').addEventListener('click',()=>{if(undoStack.length){elements=undoStack.pop();selected=null;multiSel=[];updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();}});
+document.getElementById('btn-undo').addEventListener('click',()=>{if(undoStack.length){elements=undoStack.pop();selected=null;multiSel=[];updateProps();renderAndAreas();}});
 
-document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();renderAndAreas();if(panel3dOpen)rebuild3d();}});
+document.getElementById('btn-clear').addEventListener('click',()=>{if(!elements.length)return;if(confirm('Clear all elements?')){saveHistory();elements=[];selected=null;multiSel=[];updateProps();renderAndAreas();}});
 // ── Save / Load system ──────────────────────────────────────────────────────
 const LS_KEY = 'fp_plans_v1';
 const LS_AUTO = 'fp_autosave_v1';
@@ -2311,9 +2253,6 @@ function getSettings(){
     lotW: document.getElementById('lot-w').value,
     lotH: document.getElementById('lot-h').value,
     wallH: document.getElementById('wall-height-input').value,
-    slopeLo: document.getElementById('slope-low-input').value,
-    slopeHi: document.getElementById('slope-high-input').value,
-    slopeDir: document.getElementById('slope-dir-input').value,
   };
 }
 function applySettings(s){
@@ -2323,9 +2262,6 @@ function applySettings(s){
   if(s.lotW) document.getElementById('lot-w').value=s.lotW;
   if(s.lotH) document.getElementById('lot-h').value=s.lotH;
   if(s.wallH) document.getElementById('wall-height-input').value=s.wallH;
-  if(s.slopeLo!=null) document.getElementById('slope-low-input').value=s.slopeLo;
-  if(s.slopeHi!=null) document.getElementById('slope-high-input').value=s.slopeHi;
-  if(s.slopeDir) document.getElementById('slope-dir-input').value=s.slopeDir;
 }
 
 function planData(){ return {version:3, ts:Date.now(), settings:getSettings(), elements}; }
@@ -2334,7 +2270,6 @@ function loadPlanData(data){
   elements = (data.elements||[]).map(el=>({...el, floor:el.floor??0}));
   applySettings(data.settings || {pxPerFt:data.pxPerFt, gridFt:data.gridFt});
   selected=null; multiSel=[]; updateProps(); renderAndAreas();
-  if(panel3dOpen) rebuild3d();
   markClean();
 }
 
@@ -2440,71 +2375,23 @@ document.getElementById('btn-export-png').addEventListener('click',()=>{
 });
 document.getElementById('scale-input').addEventListener('input',e=>{PX_PER_FT=parseInt(e.target.value)||20;render2d();});
 document.getElementById('grid-input').addEventListener('input',e=>{GRID_FT=parseFloat(e.target.value)||1;render2d();});
-document.getElementById('btn-fit').addEventListener('click', ()=>{ fitView(); if(panel3dOpen) fitView3d(); });
+document.getElementById('btn-fit').addEventListener('click', ()=>{ fitView(); });
 
-// fitView3d: set 3D camera to frame all elements in view
-function fitView3d(){
-  if(!camera3) return;
-  // Compute bounding box of all elements in 3D scene units
-  let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
-  let hasContent=false;
-  elements.forEach(el=>{
-    if(el.type==='room'){
-      minX=Math.min(minX,el.x/PX_PER_FT); maxX=Math.max(maxX,(el.x+el.w)/PX_PER_FT);
-      minZ=Math.min(minZ,el.y/PX_PER_FT); maxZ=Math.max(maxZ,(el.y+el.h)/PX_PER_FT);
-      hasContent=true;
-    } else if(el.type==='wall'){
-      minX=Math.min(minX,el.x1/PX_PER_FT,el.x2/PX_PER_FT); maxX=Math.max(maxX,el.x1/PX_PER_FT,el.x2/PX_PER_FT);
-      minZ=Math.min(minZ,el.y1/PX_PER_FT,el.y2/PX_PER_FT); maxZ=Math.max(maxZ,el.y1/PX_PER_FT,el.y2/PX_PER_FT);
-      hasContent=true;
-    } else if(el.type==='furniture'||el.type==='door'||el.type==='window'){
-      const hw=(el.fw||4)/2, hh=(el.fh||4)/2;
-      minX=Math.min(minX,el.x/PX_PER_FT-hw); maxX=Math.max(maxX,el.x/PX_PER_FT+hw);
-      minZ=Math.min(minZ,el.y/PX_PER_FT-hh); maxZ=Math.max(maxZ,el.y/PX_PER_FT+hh);
-      hasContent=true;
-    }
-  });
-  if(!hasContent){ minX=-10;maxX=10;minZ=-10;maxZ=10; }
-  const sceneW=maxX-minX, sceneD=maxZ-minZ;
-  const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
-  // Target = horizontal centre of scene, slightly above ground
-  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
-  // Compute required radius: fit the widest dimension in view
-  // camera FOV is 45°, so half-extent / tan(FOV/2) gives distance
-  const extent=Math.max(sceneW, sceneD, 10)*0.7;
-  const fov=45*Math.PI/180;
-  const dist=extent/Math.tan(fov/2);
-  spherical.tx=cx; spherical.ty=wallH*0.3; spherical.tz=cz;
-  spherical.radius=Math.max(dist, 8);
-  spherical.theta=Math.PI/4; // 45° angle for a nice isometric-ish view
-  spherical.phi=Math.PI/3;   // ~60° elevation
-  updateCam3();
-}
 
 // Zoom buttons — work for both 2D and 3D
 document.getElementById('btn-zoom-in').addEventListener('click',()=>{
-  if(panel3dOpen){
-    spherical.radius=Math.max(4, spherical.radius*0.8);
-    updateCam3();
-  } else {
-    const cx=canvas2d.width/2, cy=canvas2d.height/2;
-    const newZoom=Math.min(8, viewZoom*1.25);
-    viewOX=cx-(cx-viewOX)*(newZoom/viewZoom);
-    viewOY=cy-(cy-viewOY)*(newZoom/viewZoom);
-    viewZoom=newZoom; render2d();
-  }
+  const cx=canvas2d.width/2, cy=canvas2d.height/2;
+  const newZoom=Math.min(8, viewZoom*1.25);
+  viewOX=cx-(cx-viewOX)*(newZoom/viewZoom);
+  viewOY=cy-(cy-viewOY)*(newZoom/viewZoom);
+  viewZoom=newZoom; render2d();
 });
 document.getElementById('btn-zoom-out').addEventListener('click',()=>{
-  if(panel3dOpen){
-    spherical.radius=Math.min(130, spherical.radius*1.25);
-    updateCam3();
-  } else {
-    const cx=canvas2d.width/2, cy=canvas2d.height/2;
-    const newZoom=Math.max(0.15, viewZoom*0.8);
-    viewOX=cx-(cx-viewOX)*(newZoom/viewZoom);
-    viewOY=cy-(cy-viewOY)*(newZoom/viewZoom);
-    viewZoom=newZoom; render2d();
-  }
+  const cx=canvas2d.width/2, cy=canvas2d.height/2;
+  const newZoom=Math.max(0.15, viewZoom*0.8);
+  viewOX=cx-(cx-viewOX)*(newZoom/viewZoom);
+  viewOY=cy-(cy-viewOY)*(newZoom/viewZoom);
+  viewZoom=newZoom; render2d();
 });
 document.getElementById('lot-w').addEventListener('input', fitView);
 document.getElementById('lot-h').addEventListener('input', fitView);
@@ -2551,1591 +2438,19 @@ document.getElementById('btn-export-dxf').addEventListener('click',()=>{
 // ══════════════════════════════════════════════════
 // THREE.JS 3D PREVIEW
 // ══════════════════════════════════════════════════
-let panel3dOpen=false, threeReady=false;
-let renderer3, scene3, camera3, spherical={theta:Math.PI/4,phi:Math.PI/3,radius:35,tx:0,ty:0,tz:0};
-const ROOM_COLORS=[0xA8C4A0,0xC4B888,0xD4A870,0xC48878,0xB0A8C8,0x90B8C0,0xD4B878,0x98B8C8];
 
-// Panel width state
-let panel3dWidth = 420;
 
-document.getElementById('btn-toggle-3d').addEventListener('click',()=>{
-  panel3dOpen=!panel3dOpen;
-  const panel=document.getElementById('panel-3d');
-  if(panel3dOpen){
-    panel.classList.add('open');
-    panel.style.width=panel3dWidth+'px';
-    setTimeout(()=>{initThree();rebuild3d();fitView3d();resize();},50);
-  } else {
-    panel.classList.remove('open');
-    panel.style.width='0';
-  }
-  document.getElementById('btn-toggle-3d').classList.toggle('active',panel3dOpen);
-});
-
-// Wider / Narrower buttons
-document.getElementById('btn-3d-wider').addEventListener('click',()=>{
-  panel3dWidth=Math.min(window.innerWidth-300, panel3dWidth+120);
-  document.getElementById('panel-3d').style.width=panel3dWidth+'px';
-});
-document.getElementById('btn-3d-narrower').addEventListener('click',()=>{
-  panel3dWidth=Math.max(260, panel3dWidth-120);
-  document.getElementById('panel-3d').style.width=panel3dWidth+'px';
-});
-
-// Fullscreen toggle
-let is3dFullscreen=false;
-document.getElementById('btn-3d-fullscreen').addEventListener('click',()=>{
-  is3dFullscreen=!is3dFullscreen;
-  const panel=document.getElementById('panel-3d');
-  const btn=document.getElementById('btn-3d-fullscreen');
-  panel.classList.toggle('fullscreen',is3dFullscreen);
-  btn.innerHTML=is3dFullscreen?'&#x2715;':'&#x26F6;';
-  btn.title=is3dFullscreen?'Exit fullscreen':'Fullscreen';
-});
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&is3dFullscreen){
-    is3dFullscreen=false;
-    document.getElementById('panel-3d').classList.remove('fullscreen');
-    document.getElementById('btn-3d-fullscreen').innerHTML='&#x26F6;';
-  }
-  // 3D keyboard navigation when panel is open
-  if(!panel3dOpen) return;
-  if(document.activeElement&&['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
-  const PAN = spherical.radius * 0.05; // pan speed scales with zoom level
-  const sinT=Math.sin(spherical.theta), cosT=Math.cos(spherical.theta);
-  if(e.shiftKey){
-    // Shift+Arrow = move camera target vertically
-    if(e.key==='ArrowUp')   { spherical.ty+=PAN; e.preventDefault(); updateCam3(); }
-    if(e.key==='ArrowDown') { spherical.ty-=PAN; e.preventDefault(); updateCam3(); }
-  } else {
-    if(e.key==='ArrowLeft')  { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; e.preventDefault(); }
-    if(e.key==='ArrowRight') { spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; e.preventDefault(); }
-    if(e.key==='ArrowUp')    { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; e.preventDefault(); }
-    if(e.key==='ArrowDown')  { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; e.preventDefault(); }
-    if(e.key==='+' || e.key==='=') { spherical.radius=Math.max(3,spherical.radius/1.15); e.preventDefault(); }
-    if(e.key==='-')                { spherical.radius=Math.min(200,spherical.radius*1.15); e.preventDefault(); }
-    if(e.key==='f' || e.key==='F') { fitView3d(); e.preventDefault(); }
-    if(e.key==='ArrowLeft'||e.key==='ArrowRight'||e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='+'||e.key==='-'||e.key==='='||e.key==='f'||e.key==='F') updateCam3();
-  }
-},true);
-
-// Drag resizer
-(()=>{
-  const resizer=document.getElementById('panel-3d-resizer');
-  let dragging=false, startX=0, startW=0;
-  resizer.addEventListener('mousedown',e=>{
-    dragging=true; startX=e.clientX;
-    startW=document.getElementById('panel-3d').clientWidth;
-    resizer.classList.add('dragging');
-    document.body.style.cursor='ew-resize';
-    document.body.style.userSelect='none';
-    e.preventDefault();
-  });
-  window.addEventListener('mousemove',e=>{
-    if(!dragging)return;
-    const delta=startX-e.clientX; // drag left = make wider
-    panel3dWidth=Math.max(260,Math.min(window.innerWidth-300, startW+delta));
-    document.getElementById('panel-3d').style.width=panel3dWidth+'px';
-  });
-  window.addEventListener('mouseup',()=>{
-    if(!dragging)return;
-    dragging=false; resizer.classList.remove('dragging');
-    document.body.style.cursor=''; document.body.style.userSelect='';
-  });
-})();
-document.getElementById('wall-height-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
-document.getElementById('slope-low-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
-document.getElementById('slope-high-input').addEventListener('input',()=>{if(panel3dOpen)rebuild3d();});
-document.getElementById('slope-dir-input').addEventListener('change',()=>{if(panel3dOpen)rebuild3d();});
-
-function initThree(){
-  if(threeReady)return; threeReady=true;
-  const c=document.getElementById('three-canvas');
-  renderer3=new THREE.WebGLRenderer({canvas:c,antialias:true});
-  renderer3.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer3.setClearColor(0xF2EAD8,1); // warm paper
-  renderer3.shadowMap.enabled=true;
-  scene3=new THREE.Scene();
-  scene3.background=new THREE.Color(0xF2EAD8);
-  scene3.fog=new THREE.Fog(0xF2EAD8,120,300);
-  camera3=new THREE.PerspectiveCamera(50,1,0.1,1000);
-  updateCam3();
-  // Physically-based lighting for MeshStandardMaterial
-  scene3.add(new THREE.AmbientLight(0xf5e8c8, 0.6)); // warm paper ambient — low enough for toon contrast
-  const sun=new THREE.DirectionalLight(0xffe0a0, 1.8); // golden sketch sun
-  sun.position.set(-30, 55, 20); // upper-left like hand drawings
-  sun.castShadow=true;
-  sun.shadow.mapSize.width=2048; sun.shadow.mapSize.height=2048;
-  sun.shadow.camera.near=0.5; sun.shadow.camera.far=300;
-  sun.shadow.camera.left=-80; sun.shadow.camera.right=80;
-  sun.shadow.camera.top=80;   sun.shadow.camera.bottom=-80;
-  sun.shadow.bias=-0.001;
-  scene3.add(sun);
-  const fill2=new THREE.DirectionalLight(0xc8b890, 0.3); // warm side fill
-  fill2.position.set(25, 20, -15); scene3.add(fill2);
-  // Subtle back light to separate elements from background
-  const back=new THREE.DirectionalLight(0xe8d8c0, 0.15);
-  back.position.set(0, -10, -30); scene3.add(back);
-
-  // ── Navigation state ──────────────────────────────────────────
-  // vel* = momentum velocity (decays each frame)
-  let navState = {
-    dragging: false, panning: false,
-    lastX:0, lastY:0,
-    velTheta:0, velPhi:0,   // orbit momentum
-    velTx:0, velTz:0,       // pan momentum
-  };
-
-  // ── Mouse navigation ──────────────────────────────────────────
-  c.addEventListener('mousedown', e => {
-    e.stopPropagation();
-    navState.lastX = e.clientX; navState.lastY = e.clientY;
-    // Right-click or middle-click = pan; left-click = orbit
-    if(e.button === 2 || e.button === 1){
-      navState.panning  = true; navState.dragging = false;
-      e.preventDefault();
-    } else if(e.button === 0){
-      navState.dragging = true; navState.panning  = false;
-    }
-    // Kill any existing momentum on new drag
-    navState.velTheta=0; navState.velPhi=0; navState.velTx=0; navState.velTz=0;
-  });
-
-  window.addEventListener('mouseup', () => {
-    navState.dragging = false; navState.panning = false;
-  });
-
-  window.addEventListener('mousemove', e => {
-    if(!navState.dragging && !navState.panning) return;
-    const dx = e.clientX - navState.lastX;
-    const dy = e.clientY - navState.lastY;
-    navState.lastX = e.clientX; navState.lastY = e.clientY;
-
-    if(navState.dragging){
-      // Orbit — speed scales with distance so it feels consistent
-      const speed = 0.005 * Math.max(0.3, spherical.radius / 30);
-      navState.velTheta -= dx * speed;
-      navState.velPhi   -= dy * speed;
-    } else if(navState.panning){
-      // Pan in the camera's XZ plane
-      const panSpeed = 0.004 * spherical.radius / 30;
-      // Right vector and up-projected forward in world XZ
-      const cosT=Math.cos(spherical.theta), sinT=Math.sin(spherical.theta);
-      navState.velTx += (-dx * cosT - dy * sinT * 0.3) * panSpeed;
-      navState.velTz += ( dx * sinT - dy * cosT * 0.3) * panSpeed;
-    }
-    updateCam3();
-  });
-
-  // Scroll = exponential zoom (feels linear regardless of distance)
-  c.addEventListener('wheel', e => {
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 1.12 : 1/1.12;
-    // For trackpads deltaMode=0 gives small values; mice give ~100
-    const steps = Math.abs(e.deltaY) > 50 ? 1 : Math.abs(e.deltaY)/50;
-    spherical.radius = Math.max(3, Math.min(200, spherical.radius * Math.pow(factor, steps)));
-    updateCam3();
-  }, {passive:false});
-
-  // Right-click context menu suppression
-  c.addEventListener('contextmenu', e => e.preventDefault());
-
-  // Double-click: fit view
-  c.addEventListener('dblclick', () => fitView3d());
-
-  // Keyboard nav directly on canvas (works when canvas is focused)
-  c.setAttribute('tabindex','0');
-  c.addEventListener('keydown', e => {
-    if(!panel3dOpen) return;
-    const PAN = spherical.radius * 0.05;
-    const sinT=Math.sin(spherical.theta), cosT=Math.cos(spherical.theta);
-    if(e.shiftKey){
-      if(e.key==='ArrowUp')  { spherical.ty+=PAN; updateCam3(); e.preventDefault(); }
-      if(e.key==='ArrowDown'){ spherical.ty-=PAN; updateCam3(); e.preventDefault(); }
-    } else {
-      if(e.key==='ArrowLeft') { spherical.tx-=cosT*PAN; spherical.tz+=sinT*PAN; updateCam3(); e.preventDefault(); }
-      if(e.key==='ArrowRight'){ spherical.tx+=cosT*PAN; spherical.tz-=sinT*PAN; updateCam3(); e.preventDefault(); }
-      if(e.key==='ArrowUp')   { spherical.tx-=sinT*PAN; spherical.tz-=cosT*PAN; updateCam3(); e.preventDefault(); }
-      if(e.key==='ArrowDown') { spherical.tx+=sinT*PAN; spherical.tz+=cosT*PAN; updateCam3(); e.preventDefault(); }
-      if(e.key==='+' || e.key==='='){ spherical.radius=Math.max(3,spherical.radius/1.15); updateCam3(); e.preventDefault(); }
-      if(e.key==='-'){ spherical.radius=Math.min(200,spherical.radius*1.15); updateCam3(); e.preventDefault(); }
-    }
-  });
-
-  // Touch: one finger = orbit, two fingers = pinch-zoom + pan
-  let touches = {};
-  let lastPinchDist = 0;
-  c.addEventListener('touchstart', e => {
-    e.preventDefault();
-    navState.velTheta=0; navState.velPhi=0;
-    Array.from(e.touches).forEach(t => touches[t.identifier]={x:t.clientX,y:t.clientY});
-  }, {passive:false});
-  c.addEventListener('touchmove', e => {
-    e.preventDefault();
-    if(e.touches.length === 1){
-      const t=e.touches[0], prev=touches[t.identifier]||{x:t.clientX,y:t.clientY};
-      const dx=t.clientX-prev.x, dy=t.clientY-prev.y;
-      navState.velTheta -= dx*0.006; navState.velPhi -= dy*0.006;
-      touches[t.identifier]={x:t.clientX,y:t.clientY};
-      updateCam3();
-    } else if(e.touches.length >= 2){
-      const t0=e.touches[0], t1=e.touches[1];
-      const dist=Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
-      if(lastPinchDist > 0){
-        const scale = lastPinchDist/dist;
-        spherical.radius = Math.max(3, Math.min(200, spherical.radius * scale));
-        updateCam3();
-      }
-      lastPinchDist = dist;
-      touches[t0.identifier]={x:t0.clientX,y:t0.clientY};
-      touches[t1.identifier]={x:t1.clientX,y:t1.clientY};
-    }
-  }, {passive:false});
-  c.addEventListener('touchend', e => {
-    Array.from(e.changedTouches).forEach(t => delete touches[t.identifier]);
-    if(e.touches.length < 2) lastPinchDist=0;
-  });
-
-  // ── Render loop with momentum damping ─────────────────────────
-  let _lastCw=0, _lastCh=0;
-  function syncSize(){
-    const panel=document.getElementById('panel-3d');
-    const cw=panel.clientWidth, ch=Math.max(1,panel.clientHeight-76);
-    if(cw>10&&ch>10&&(cw!==_lastCw||ch!==_lastCh)){
-      _lastCw=cw; _lastCh=ch;
-      renderer3.setSize(cw,ch);
-      camera3.aspect=cw/ch;
-      camera3.updateProjectionMatrix();
-    }
-  }
-  syncSize();
-
-  const DAMP = 0.82; // momentum decay per frame (0=no momentum, 1=infinite coast)
-  (function animate(){
-    requestAnimationFrame(animate);
-    syncSize();
-
-    // Apply orbit momentum
-    if(Math.abs(navState.velTheta)>0.0001 || Math.abs(navState.velPhi)>0.0001){
-      spherical.theta += navState.velTheta;
-      spherical.phi = Math.max(0.06, Math.min(Math.PI/2-0.02,
-        spherical.phi + navState.velPhi));
-      navState.velTheta *= DAMP;
-      navState.velPhi   *= DAMP;
-      updateCam3();
-    }
-    // Apply pan momentum
-    if(Math.abs(navState.velTx)>0.0001 || Math.abs(navState.velTz)>0.0001){
-      spherical.tx += navState.velTx;
-      spherical.tz += navState.velTz;
-      navState.velTx *= DAMP;
-      navState.velTz *= DAMP;
-      updateCam3();
-    }
-
-    renderer3.render(scene3,camera3);
-  })();
-}
-
-function updateCam3(){
-  if(!camera3)return;
-  camera3.position.set(
-    spherical.tx + spherical.radius*Math.sin(spherical.phi)*Math.sin(spherical.theta),
-    spherical.ty + spherical.radius*Math.cos(spherical.phi),
-    spherical.tz + spherical.radius*Math.sin(spherical.phi)*Math.cos(spherical.theta)
-  );
-  camera3.lookAt(spherical.tx, spherical.ty, spherical.tz);
-}
 
 // ── Floor / layer visibility ─────────────────────────────────
-function applyFloorVisibility() {
-  if (!scene3) return;
-  scene3.children.forEach(c => {
-    if (!c.userData.fp) return;
-    if (c.userData.isRoof)    { c.visible = !!layerVisible.roof;    return; }
-    if (c.userData.isFrame)   { c.visible = !!layerVisible.frame;   return; }
-    if (c.userData.isOutdoor) { c.visible = !!layerVisible.outdoor; return; }
-    if (c.userData.floorNum !== undefined)
-      c.visible = !!layerVisible[c.userData.floorNum];
-  });
-}
 
 // 3D panel buttons wire up after DOM ready (they exist in HTML above script)
-document.getElementById('vis-fl-0').addEventListener('click', () => toggleLayerVisible(0));
-document.getElementById('vis-fl-1').addEventListener('click', () => toggleLayerVisible(1));
-document.getElementById('vis-roof').addEventListener('click', () => toggleLayerVisible('roof'));
-document.getElementById('vis-frame').addEventListener('click', () => toggleLayerVisible('frame'));
-document.getElementById('vis-outdoor').addEventListener('click', () => toggleLayerVisible('outdoor'));
 
-function rebuild3d(){
-  if(!scene3)return;
-  const rem=[]; scene3.children.forEach(c=>{if(c.userData.fp)rem.push(c);}); rem.forEach(c=>{scene3.remove(c);if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose();});
 
-  // ── Sketch/watercolor helpers ─────────────────────────────────
-  function blendHex(a,b,t){
-    const ar=(a>>16)&255,ag=(a>>8)&255,ab=a&255;
-    const br=(b>>16)&255,bg=(b>>8)&255,bb=b&255;
-    return(Math.round(ar+(br-ar)*t)<<16)|(Math.round(ag+(bg-ag)*t)<<8)|Math.round(ab+(bb-ab)*t);
-  }
-  function makeToonGrad(hi,mid,shad){
-    const cv=document.createElement('canvas');cv.width=4;cv.height=1;
-    const cx2=cv.getContext('2d');
-    const hex=v=>`rgb(${(v>>16)&255},${(v>>8)&255},${v&255})`;
-    cx2.fillStyle=hex(shad);cx2.fillRect(0,0,2,1);
-    cx2.fillStyle=hex(mid); cx2.fillRect(2,0,1,1);
-    cx2.fillStyle=hex(hi);  cx2.fillRect(3,0,1,1);
-    const t=new THREE.CanvasTexture(cv);
-    t.magFilter=THREE.NearestFilter;t.minFilter=THREE.NearestFilter;
-    return t;
-  }
-  function sketchMat(col,opts={}){
-    // 3-step toon: hi=col slightly warm, mid=30% darker, shad=65% darker
-    // This ensures lit faces show color and shadow faces are clearly dark
-    const hi =blendHex(col,0xFFEED0,0.08);  // tiny warm highlight
-    const mid=blendHex(col,0x2a1206,0.30);  // 30% darker for mid
-    const shad=blendHex(col,0x0a0500,0.65); // 65% darker for shadow
-    return new THREE.MeshToonMaterial({color:hi,gradientMap:makeToonGrad(hi,mid,shad),...opts});
-  }
-  function inkOutline(parent,thickness=0.05,col=0x1a0a00){
-    if(!parent.geometry)return;
-    const m=new THREE.Mesh(parent.geometry.clone(),
-      new THREE.MeshBasicMaterial({color:col,side:THREE.BackSide}));
-    m.scale.setScalar(1+thickness);
-    m.position.copy(parent.position);
-    m.rotation.copy(parent.rotation);
-    m.userData.fp=true;
-    m.userData.floorNum=parent.userData.floorNum;
-    scene3.add(m);
-  }
-  // Watercolor palette — all colors >80 delta from background 0xF2EAD8
-  const P={
-    wallG:0xD4B896,  // warm ochre — ground floor walls
-    wallU:0xC4A882,  // slightly deeper — upper floor
-    slab: 0xC8B898,  // warm stone floor slab
-    roof: 0xB07850,  // terracotta roof
-    roofD:0x8C5C38,  // dark terracotta ridge
-    wood: 0xC8904E,  // honey wood planks
-    darkWood:0x8C5E30, // dark wood trim
-    found:0xAA9070,  // foundation stone
-    glass:0x88B8D8,  // window glass — blue-gray
-    door: 0x7A5030,  // warm brown door
-    frame:0x9A7050,  // door/window frame
-    knob: 0xC8A030,  // brass knob
-    timber:0xB47830, // timber frame
-    post:  0x9A6030, // timber post
-    ink:   0x1A0A00, // ink outline
-  };
-
-  const wallH=parseFloat(document.getElementById('wall-height-input').value)||9;
-  const FLOOR_SEP=0.4; // thickness of floor slab between levels
-
-  // Terrain: linear slope from Lo height to Hi height across the lot.
-  // slopeDir tells us which edge is the HIGH side.
-  const slopeLo  = parseFloat(document.getElementById('slope-low-input').value)  || 0;
-  const slopeHi  = parseFloat(document.getElementById('slope-high-input').value) || 0;
-  const slopeDir = document.getElementById('slope-dir-input').value || 'E';
-
-  // Lot extents in scene coords (scene is centred on element bounding box)
-  // These are computed later, but we need them for slopeOffset.
-  // We'll use the lot inputs directly and lazy-compute cx/cz here too.
-  const _lotW=parseFloat(document.getElementById('lot-w').value)||100;
-  const _lotH=parseFloat(document.getElementById('lot-h').value)||100;
-
-  // slopeOffset(x3, z3): returns the terrain Y at a scene-space position.
-  // Linearly interpolates Lo→Hi across the lot dimension for the chosen axis.
-  // The lot in scene space runs from (-cx) to (_lotW-cx) in X,
-  // and from (-cz) to (_lotH-cz) in Z. cx/cz are computed below — we use
-  // a closure so slopeOffset can be called after cx/cz are set.
-  let _cx=0, _cz=0; // will be set after bounding box is computed
-  function slopeOffset(x3,z3){
-    if(slopeLo===slopeHi) return slopeLo; // flat
-    // Map position along the slope axis to a 0..1 fraction across the lot
-    let frac;
-    if(slopeDir==='E'||slopeDir==='W'){
-      // X axis: lot goes from -_cx to _lotW-_cx
-      const x0=-_cx, x1=_lotW-_cx;
-      frac=(x3-x0)/(x1-x0);
-      if(slopeDir==='W') frac=1-frac; // W = high on west (low x) side
-    } else {
-      // Z axis: lot goes from -_cz to _lotH-_cz
-      const z0=-_cz, z1=_lotH-_cz;
-      frac=(z3-z0)/(z1-z0);
-      if(slopeDir==='N') frac=1-frac; // N = high on north (low z) side
-    }
-    frac=Math.max(0,Math.min(1,frac)); // clamp outside lot
-    return slopeLo + (slopeHi-slopeLo)*frac;
-  }
-
-  // Centre scene on bounding box
-  let minX=Infinity,minZ=Infinity,maxX=-Infinity,maxZ=-Infinity;
-  elements.forEach(el=>{
-    if(el.type==='room'){minX=Math.min(minX,el.x);minZ=Math.min(minZ,el.y);maxX=Math.max(maxX,el.x+el.w);maxZ=Math.max(maxZ,el.y+el.h);}
-    if(el.type==='wall'){minX=Math.min(minX,el.x1,el.x2);minZ=Math.min(minZ,el.y1,el.y2);maxX=Math.max(maxX,el.x1,el.x2);maxZ=Math.max(maxZ,el.y1,el.y2);}
-  });
-  const cx=isFinite(minX)?(minX+maxX)/2/PX_PER_FT:0, cz=isFinite(minZ)?(minZ+maxZ)/2/PX_PER_FT:0;
-  _cx=cx; _cz=cz; // make cx/cz available inside slopeOffset closure
-
-  // Tag a mesh with its floor number and respect current visibility
-  function addFP(obj, fl, el_ref) {
-    obj.userData.fp = true;
-    if(el_ref && defaultFollowTerrain(el_ref)){
-      obj.userData.isOutdoor = true;
-      obj.visible = !!layerVisible.outdoor;
-    } else {
-      obj.userData.floorNum = fl;
-      obj.visible = !!layerVisible[fl];
-    }
-    scene3.add(obj);
-    return obj;
-  }
-
-  let ri=0;
-
-  // ── Clean elevation model ──────────────────────────────────────────────────
-  // Each room owns its floor elevation explicitly (el.elevation, in scene ft).
-  // If not set, it defaults to the terrain height at the room's centre.
-  // This makes the system transparent: user can read and edit elevation directly.
-
-  const OUTDOOR_FTYPES=['balcony','deck','patio','pool','hot-tub','driveway','path','tree','shrub','garden-bed','graded-area','floor-cutout'];
-  const floorCutouts=elements.filter(e=>e.type==='furniture'&&e.ftype==='floor-cutout');
-
-  // Compute terrain Y at a canvas-px position
-  function terrainAt(px2d, py2d){
-    return slopeOffset(px2d/PX_PER_FT-cx, py2d/PX_PER_FT-cz);
-  }
-
-  // Resolve a ground-floor room's Y elevation.
-  // Default is 0 (flat ground) — the terrain slopes around/beneath rooms.
-  // User can set room.elevation explicitly to place a room on a hillside pad.
-  function groundRoomElev(room){
-    return room.elevation ?? 0;
-  }
-
-  // Find ground-floor room with most 2D overlap with a given rect
-  function bestGroundRoomBelow(x,y,w,h){
-    let best=null, bestArea=0;
-    for(const r of elements){
-      if(r.type!=='room'||(r.floor||0)!==0) continue;
-      const ox=Math.max(0,Math.min(x+w,r.x+r.w)-Math.max(x,r.x));
-      const oz=Math.max(0,Math.min(y+h,r.y+r.h)-Math.max(y,r.y));
-      if(ox*oz>bestArea){bestArea=ox*oz;best=r;}
-    }
-    return best;
-  }
-
-  // Resolve any room's Y elevation
-  function roomElev(room){
-    const fl=room.floor||0;
-    if(fl===0) return groundRoomElev(room);
-    // Upper floor: sits on the ground room below it
-    if(room.elevation!=null) return room.elevation; // explicit override
-    const below=bestGroundRoomBelow(room.x,room.y,room.w,room.h);
-    const groundY=below ? groundRoomElev(below) : terrainAt(room.x+room.w/2, room.y+room.h/2);
-    return groundY+wallH+FLOOR_SEP;
-  }
-
-  // Find the room that contains a 2D point on a given floor
-  function containingRoom(px2d,py2d,floor){
-    for(const r of elements){
-      if(r.type!=='room'||(r.floor||0)!==floor) continue;
-      if(px2d>=r.x&&px2d<=r.x+r.w&&py2d>=r.y&&py2d<=r.y+r.h) return r;
-    }
-    return null;
-  }
-
-  for(const el of elements){
-    const fl=el.floor||0;
-
-    // Compute element centre in 3D for terrain lookup
-    let ex3=0,ez3=0;
-    if(el.type==='room'){ex3=(el.x+el.w/2)/PX_PER_FT-cx;ez3=(el.y+el.h/2)/PX_PER_FT-cz;}
-    else if(el.type==='wall'){ex3=(el.x1+el.x2)/2/PX_PER_FT-cx;ez3=(el.y1+el.y2)/2/PX_PER_FT-cz;}
-    else if(el.type==='member'){ex3=el.x1/PX_PER_FT-cx;ez3=el.y1/PX_PER_FT-cz;}
-    else{ex3=el.x/PX_PER_FT-cx;ez3=el.y/PX_PER_FT-cz;}
-
-    let yBase;
-    if(el.type==='room'){
-      yBase=roomElev(el);
-    } else if(el.type==='member'){
-      // followTerrain=true (default): sit on slope. false: fixed floor level (0).
-      if(!getFollowTerrain(el)){
-        yBase = 0; // fixed floor — no slope
-      } else if(el.role==='post'){
-        yBase = slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
-      } else {
-        const y1t=slopeOffset(el.x1/PX_PER_FT-cx, el.y1/PX_PER_FT-cz);
-        const y2t=slopeOffset(el.x2/PX_PER_FT-cx, el.y2/PX_PER_FT-cz);
-        yBase=(y1t+y2t)/2;
-      }
-    } else if(el.type==='wall'||el.type==='door'||el.type==='window'||el.type==='furniture'){
-      // Unified yBase: followTerrain=true → slopeOffset, false → floor elevation
-      const ft = getFollowTerrain(el);
-      if(ft){
-        yBase = slopeOffset(ex3, ez3);
-      } else {
-        // Floor elevation: inside a room → roomElev, otherwise floor default
-        const cx2d = el.x1!==undefined ? (el.x1+el.x2)/2 : el.x;
-        const cy2d = el.y1!==undefined ? (el.y1+el.y2)/2 : el.y;
-        const room = containingRoom(cx2d, cy2d, fl);
-        if(room){
-          yBase = roomElev(room);
-        } else if(fl===1){
-          const below=bestGroundRoomBelow(cx2d,cy2d,1,1);
-          yBase = below ? groundRoomElev(below)+wallH+FLOOR_SEP : wallH+FLOOR_SEP;
-        } else {
-          yBase = 0;
-        }
-      }
-      // Graded area: explicit elevation override
-      if(el.type==='furniture'&&el.ftype==='graded-area'&&el.elevation!=null){
-        yBase=el.elevation;
-      }
-    } else if(el.type==='roof'){
-      // Roof sits on top of the highest floor that has rooms beneath its footprint.
-      // Check for upper-floor rooms first; if any exist, roof goes on top of them.
-      // If only ground-floor rooms, roof goes on top of those.
-      const hasUpperRooms = elements.some(r =>
-        r.type==='room' && (r.floor||0)===1 &&
-        r.x < el.x+el.w && r.x+r.w > el.x &&
-        r.y < el.y+el.h && r.y+r.h > el.y);
-      if(hasUpperRooms){
-        const below = bestGroundRoomBelow(el.x, el.y, el.w, el.h);
-        yBase = below ? groundRoomElev(below)+wallH+FLOOR_SEP : wallH+FLOOR_SEP;
-      } else {
-        const below = bestGroundRoomBelow(el.x, el.y, el.w, el.h);
-        yBase = below ? groundRoomElev(below) : 0;
-      }
-    } else {
-      yBase=slopeOffset(ex3,ez3);
-    }
-
-    if(el.type==='room'){
-      const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
-      const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
-      const col=ROOM_COLORS[ri++%ROOM_COLORS.length];
-
-      // Floor / ceiling slab
-      if(fl===0){
-        // Ground floor: translucent colored plane + opaque foundation fill
-        // that drops from yBase down to terrain, hiding the slope inside rooms.
-        const fm=new THREE.Mesh(new THREE.BoxGeometry(rw,0.06,rh),sketchMat(col,{transparent:true,opacity:0.45}));
-        fm.position.set(rx+rw/2,yBase-0.03,rz+rh/2); addFP(fm,fl);
-
-        // Foundation fill: opaque concrete slab from yBase down to the lowest
-        // terrain corner, so the slope is never visible inside the room footprint.
-        // Foundation fill: only needed where terrain drops BELOW the floor level.
-        // lowestTerrain may be negative (downhill corners). foundH = floor - lowest.
-        const corners=[[rx,rz],[rx+rw,rz],[rx,rz+rh],[rx+rw,rz+rh]];
-        const lowestTerrain=Math.min(...corners.map(([x,z])=>slopeOffset(x,z)));
-        const foundH=yBase-lowestTerrain+0.1; // how far down we need to fill
-        if(foundH>0.1){
-          const foundMat=sketchMat(P.found);
-          const found=new THREE.Mesh(new THREE.BoxGeometry(rw,foundH,rh),foundMat);
-          found.position.set(rx+rw/2, yBase-foundH/2, rz+rh/2);
-          found.receiveShadow=true; addFP(found,fl);
-        }
-      } else {
-        // Upper floor — render slab and wood base, with rectangular holes for floor-cutouts.
-        // Find cutouts overlapping this room (canvas pixel coords).
-        const roomCutouts = floorCutouts.filter(fc => {
-          if((fc.floor||0) !== fl) return false;
-          const fcx1=fc.x-fc.fw*PX_PER_FT/2, fcx2=fc.x+fc.fw*PX_PER_FT/2;
-          const fcy1=fc.y-fc.fh*PX_PER_FT/2, fcy2=fc.y+fc.fh*PX_PER_FT/2;
-          return fcx1<el.x+el.w && fcx2>el.x && fcy1<el.y+el.h && fcy2>el.y;
-        });
-
-        const slabMat = sketchMat(P.slab);
-        const baseMat = sketchMat(P.wood);
-        // Arrow fn (not function declaration) avoids hoisting issues, closes over yBase/fl correctly
-        const addSR = (x3,z3,w3,d3) => {
-          if(w3<0.05||d3<0.05) return;
-          const s=new THREE.Mesh(new THREE.BoxGeometry(w3,FLOOR_SEP,d3),slabMat);
-          s.position.set(x3,yBase-FLOOR_SEP/2,z3); s.castShadow=true; s.receiveShadow=true;
-          addFP(s,fl);
-          const b=new THREE.Mesh(new THREE.BoxGeometry(w3,0.06,d3),baseMat);
-          b.position.set(x3,yBase+0.03,z3); b.receiveShadow=true;
-          addFP(b,fl);
-        };
-
-        if(roomCutouts.length===0){
-          addSR(rx+rw/2, rz+rh/2, rw, rh);
-        } else {
-          // Clamp the cutout to this room's bounds in 3D scene coords
-          const fc=roomCutouts[0];
-          const fcx1=Math.max(el.x, fc.x-fc.fw*PX_PER_FT/2)/PX_PER_FT-cx;
-          const fcx2=Math.min(el.x+el.w, fc.x+fc.fw*PX_PER_FT/2)/PX_PER_FT-cx;
-          const fcz1=Math.max(el.y, fc.y-fc.fh*PX_PER_FT/2)/PX_PER_FT-cz;
-          const fcz2=Math.min(el.y+el.h, fc.y+fc.fh*PX_PER_FT/2)/PX_PER_FT-cz;
-          const rx2=rx+rw, rz2=rz+rh;
-          // 4 border strips: N (near z), S (far z), W (left x), E (right x)
-          addSR(rx+rw/2,       (rz+fcz1)/2,    rw,        fcz1-rz);   // N: z < cutout
-          addSR(rx+rw/2,       (fcz2+rz2)/2,   rw,        rz2-fcz2);  // S: z > cutout
-          addSR((rx+fcx1)/2,   (fcz1+fcz2)/2,  fcx1-rx,   fcz2-fcz1); // W: x < cutout
-          addSR((fcx2+rx2)/2,  (fcz1+fcz2)/2,  rx2-fcx2,  fcz2-fcz1); // E: x > cutout
-        }
-
-        // Hardwood planks — skip planks that fall inside a floor-cutout
-        const nPlanks=Math.max(3,Math.round(rh/0.25));
-        const plankW=rh/nPlanks;
-        const colA=sketchMat(P.wood);
-        const colB=sketchMat(P.darkWood);
-        for(let pi=0;pi<nPlanks;pi++){
-          // Plank spans full room width in X, steps in Z.
-          // Check if this plank's Z band overlaps any cutout's Z range,
-          // AND the cutout overlaps this room's X range (not just centre).
-          const plankZ1=el.y+plankW*PX_PER_FT*pi;
-          const plankZ2=el.y+plankW*PX_PER_FT*(pi+1);
-          const inCutout=floorCutouts.some(fc=>{
-            if((fc.floor||0)!==(el.floor||0))return false;
-            const fcx1=fc.x-fc.fw*PX_PER_FT/2, fcx2=fc.x+fc.fw*PX_PER_FT/2;
-            const fcz1=fc.y-fc.fh*PX_PER_FT/2, fcz2=fc.y+fc.fh*PX_PER_FT/2;
-            // Plank overlaps cutout in Z, and cutout overlaps room in X
-            const zOverlap = plankZ1 < fcz2 && plankZ2 > fcz1;
-            const xOverlap = fcx1 < el.x+el.w && fcx2 > el.x;
-            return zOverlap && xOverlap;
-          });
-          if(inCutout)continue;
-          const plank=new THREE.Mesh(
-            new THREE.BoxGeometry(rw-0.04, 0.04, plankW-0.015),
-            pi%2===0?colA:colB
-          );
-          plank.position.set(rx+rw/2, yBase+0.065, rz+plankW*(pi+0.5));
-          addFP(plank,fl);
-        }
-      }
-
-      // Four walls — skip any face toggled open
-      const wMat=sketchMat(fl===0?P.wallG:P.wallU,{side:THREE.DoubleSide});
-      const wt=0.25;
-      const roomW=el.walls||{N:true,S:true,E:true,W:true};
-      // Each entry: {key, w, d, x, z}
-      // N=top edge (z=rz), S=bottom (z=rz+rh), W=left (x=rx), E=right (x=rx+rw)
-      const wallDefs=[
-        {key:'N', w:rw, d:wt, x:rx+rw/2,   z:rz+wt/2},
-        {key:'S', w:rw, d:wt, x:rx+rw/2,   z:rz+rh-wt/2},
-        {key:'W', w:wt, d:rh, x:rx+wt/2,   z:rz+rh/2},
-        {key:'E', w:wt, d:rh, x:rx+rw-wt/2,z:rz+rh/2},
-      ];
-      wallDefs.forEach(wd=>{
-        if(roomW[wd.key]===false) return; // open face — no wall mesh
-        // Above-ground wall
-        const m=new THREE.Mesh(new THREE.BoxGeometry(wd.w,wallH,wd.d),wMat);
-        m.position.set(wd.x,yBase+wallH/2,wd.z);m.castShadow=true;addFP(m,fl);
-        inkOutline(m,0.04,P.ink); // ink edge on room walls
-        // Stem wall: extend below yBase on downhill sides (where terrain is below floor)
-        if(fl===0){
-          const terrainUnder=slopeOffset(wd.x,wd.z);
-          const drop=yBase-terrainUnder; // positive = terrain below floor = we need a stem
-          if(drop>0.05){
-            const stemMat=sketchMat(P.found,{side:THREE.DoubleSide});
-            const stemH=drop+0.05;
-            const stem=new THREE.Mesh(new THREE.BoxGeometry(wd.w,stemH,wd.d+0.02),stemMat);
-            stem.position.set(wd.x,yBase-stemH/2,wd.z);stem.castShadow=true;addFP(stem,fl);
-          }
-        }
-      });
-
-      // Label sprite (room name only, no sq ft)
-      if(el.label){
-        const sp=makeSprite(el.label,'',col);
-        sp.position.set(rx+rw/2,yBase+wallH+1.0,rz+rh/2);addFP(sp,fl);
-      }
-
-    } else if(el.type==='wall'){
-      const x1=el.x1/PX_PER_FT-cx,z1=el.y1/PX_PER_FT-cz,x2=el.x2/PX_PER_FT-cx,z2=el.y2/PX_PER_FT-cz;
-      const len=Math.hypot(x2-x1,z2-z1); if(len<0.05)continue;
-      let wh3d, wCol, wThk;
-      if(el.landscape){
-        wh3d=0.75; wCol=0x887050; wThk=0.3; // landscape wall darker
-      } else {
-        wh3d = el.half ? wallH*0.5 : wallH;
-        wCol = el.half ? (fl===0?0xC8B080:0xB8A070) : (fl===0?0xD4B896:0xC4A882);
-        wThk = 0.25;
-      }
-      const m=new THREE.Mesh(new THREE.BoxGeometry(len,wh3d,wThk),sketchMat(wCol,{side:THREE.DoubleSide}));
-      m.position.set((x1+x2)/2,yBase+wh3d/2,(z1+z2)/2);
-      m.rotation.y=-Math.atan2(z2-z1,x2-x1);m.castShadow=true;addFP(m,fl);
-      inkOutline(m,0.035,P.ink);
-      if(el.landscape){
-        const cop=new THREE.Mesh(new THREE.BoxGeometry(len+0.06,0.08,wThk+0.1),sketchMat(P.found));
-        cop.position.set((x1+x2)/2,yBase+wh3d+0.04,(z1+z2)/2);
-        cop.rotation.y=-Math.atan2(z2-z1,x2-x1);addFP(cop,fl);
-      }
-
-    } else if(el.type==='door'){
-      // wallAng: door swing angle is perpendicular to the wall, so add PI/2
-      const doorLen  = (el.len||PX_PER_FT*3)/PX_PER_FT;
-      const doorH    = wallH * 0.88;
-      const wallThk  = 0.80;   // match window glassD so panel pierces both wall faces
-      const panelThk = wallThk; // panel same depth as wall so visible from both sides
-      const dx3 = el.x/PX_PER_FT-cx, dz3 = el.y/PX_PER_FT-cz;
-      const wallAng  = -(el.angle||0) - Math.PI/2;
-
-      const dGroup = new THREE.Group();
-      // Offset so the door panel is centred on dx3,dz3 rather than hinged there
-      const hingOffX = Math.cos(wallAng) * (-doorLen/2);
-      const hingOffZ = Math.sin(wallAng) * (-doorLen/2);
-      dGroup.position.set(dx3 + hingOffX, yBase, dz3 + hingOffZ);
-      dGroup.rotation.y = wallAng;
-      addFP(dGroup, fl);
-
-      const doorMat  = sketchMat(P.door,{side:THREE.DoubleSide});
-      const frameMat = sketchMat(P.frame,{side:THREE.DoubleSide});
-      const wallFill = sketchMat(P.wallG,{side:THREE.DoubleSide});
-
-      // ── Door panel: full wall thickness so visible from both sides ──
-      const dp = new THREE.Mesh(new THREE.BoxGeometry(doorLen, doorH, panelThk), doorMat);
-      dp.position.set(doorLen/2, doorH/2, 0);
-      dp.castShadow = true;
-      dp.renderOrder = 1;
-      dGroup.add(dp);
-
-      // Recessed panel details (on front face only, offset forward)
-      const inset = sketchMat(P.darkWood,{side:THREE.DoubleSide});
-      [[doorLen*0.12, doorH*0.55, doorLen*0.76, doorH*0.34],
-       [doorLen*0.12, doorH*0.08, doorLen*0.76, doorH*0.28]].forEach(([px,py,pw,ph])=>{
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.04), inset);
-        panel.position.set(px + pw/2 - doorLen/2, py + ph/2 - doorH/2, panelThk/2 + 0.01);
-        dp.add(panel);
-        // mirror on back face
-        const panelB = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.04), inset);
-        panelB.position.set(px + pw/2 - doorLen/2, py + ph/2 - doorH/2, -(panelThk/2 + 0.01));
-        dp.add(panelB);
-      });
-
-      // ── Wall infill ABOVE door (covers the gap between door top and ceiling) ──
-      // This is the wall-coloured block that fills the transom space
-      const aboveH = wallH - doorH;
-      if(aboveH > 0.05){
-        const above = new THREE.Mesh(
-          new THREE.BoxGeometry(doorLen, aboveH, panelThk), wallFill
-        );
-        above.position.set(doorLen/2, doorH + aboveH/2, 0);
-        above.renderOrder = 1;
-        dGroup.add(above);
-      }
-
-      // ── Frame: jambs and header, slightly wider/taller than panel ──
-      const jambW = 0.12;
-      [0, doorLen].forEach(jx=>{
-        const jamb = new THREE.Mesh(new THREE.BoxGeometry(jambW, wallH, panelThk + 0.04), frameMat);
-        jamb.position.set(jx, wallH/2, 0);
-        jamb.renderOrder = 1;
-        dGroup.add(jamb);
-      });
-      const header = new THREE.Mesh(new THREE.BoxGeometry(doorLen + jambW*2, 0.14, panelThk + 0.04), frameMat);
-      header.position.set(doorLen/2, doorH + 0.07, 0);
-      header.renderOrder = 1;
-      dGroup.add(header);
-
-      // ── Knob (both sides) ──
-      const knobMat = sketchMat(P.knob);
-      [panelThk/2 + 0.06, -(panelThk/2 + 0.06)].forEach(kz=>{
-        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), knobMat);
-        knob.position.set(doorLen * 0.82, doorH * 0.45, kz);
-        dGroup.add(knob);
-      });
-
-    } else if(el.type==='window'){
-      // Window: glass is thick enough to pierce both wall faces — visible inside & out
-      const winLen = (el.len||PX_PER_FT*4)/PX_PER_FT;
-      const winH   = (el.winH  && el.winH  > 0) ? el.winH  : wallH * 0.42;
-      const sillH  = (el.sillH != null && el.sillH >= 0) ? el.sillH : wallH * 0.35;
-      const glassD = 0.8;            // deeper than wall (wt=0.25) so it pokes out both faces
-      const frameD = glassD + 0.04;
-      const wx3 = el.x/PX_PER_FT-cx, wz3 = el.y/PX_PER_FT-cz;
-      const wAng = -(el.angle||0);
-      const winY  = yBase+sillH+winH/2;
-
-      // Glass pane — MeshBasicMaterial, DoubleSide, renders on top of wall
-      const glassMat = new THREE.MeshBasicMaterial({
-        color:P.glass, transparent:true, opacity:0.50,
-        side:THREE.DoubleSide, depthWrite:false
-      });
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(winLen, winH, glassD), glassMat);
-      glass.renderOrder = 2;
-      glass.position.set(wx3, winY, wz3);
-      glass.rotation.y = wAng;
-      addFP(glass,fl);
-
-      // Frame: same deep slab, opaque white, renders behind glass but in front of wall
-      const fMat = sketchMat(P.slab,{side:THREE.DoubleSide});
-      // Outer frame box (full depth) — acts as the visible border from both sides
-      const frameOuter = new THREE.Mesh(new THREE.BoxGeometry(winLen+0.1, winH+0.1, frameD), fMat);
-      frameOuter.renderOrder = 1;
-      frameOuter.position.set(wx3, winY, wz3);
-      frameOuter.rotation.y = wAng;
-      addFP(frameOuter,fl);
-      // Inner cutout illusion: slightly smaller glass sitting inside the frame
-      // (glass already renders on top via renderOrder, so this just gives frame border)
-
-      // Horizontal rails (top and bottom)
-      [{oy: winH/2+0.035},{oy:-(winH/2+0.035)}].forEach(({oy})=>{
-        const rail=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.12,0.08,frameD+0.02),fMat);
-        rail.renderOrder=1;
-        rail.position.set(wx3, winY+oy, wz3);
-        rail.rotation.y=wAng; addFP(rail,fl);
-      });
-      // Vertical stiles (left and right)
-      [-0.5,0.5].forEach(frac=>{
-        const sx=wx3+(winLen*frac+Math.sign(frac)*0.04)*Math.cos(wAng);
-        const sz=wz3+(winLen*frac+Math.sign(frac)*0.04)*Math.sin(wAng);
-        const stile=new THREE.Mesh(new THREE.BoxGeometry(0.09,winH+0.12,frameD+0.02),fMat);
-        stile.renderOrder=1;
-        stile.position.set(sx,winY,sz);
-        stile.rotation.y=wAng; addFP(stile,fl);
-      });
-      // Centre mullion
-      const mull=new THREE.Mesh(new THREE.BoxGeometry(0.07,winH,frameD+0.02),fMat);
-      mull.renderOrder=1;
-      mull.position.set(wx3,winY,wz3);
-      mull.rotation.y=wAng; addFP(mull,fl);
-      // Sill ledge (outside only — protrudes outward from wall face)
-      const sill=new THREE.Mesh(new THREE.BoxGeometry(winLen+0.25,0.06,0.18),fMat);
-      sill.renderOrder=1;
-      sill.position.set(wx3, yBase+sillH-0.03, wz3);
-      sill.rotation.y=wAng; addFP(sill,fl);
-
-    } else if(el.type==='roof'){
-      const rw=el.w/PX_PER_FT, rh=el.h/PX_PER_FT;
-      const rx=el.x/PX_PER_FT-cx, rz=el.y/PX_PER_FT-cz;
-      const ov=el.overhang??1;
-      const pitch=el.pitch??6;
-      const rtype=el.rtype||'gable';
-      const ridgeDir=el.ridgeDir||'EW';
-      const roofAng=-(el.angle||0);
-      const roofBase=yBase+wallH;
-
-      // All roof geometry lives in a group so rotation works cleanly
-      const roofGroup=new THREE.Group();
-      roofGroup.position.set(rx+rw/2, 0, rz+rh/2);
-      roofGroup.rotation.y=roofAng;
-      roofGroup.userData.fp=true;
-      roofGroup.userData.isRoof=true;
-      roofGroup.visible=!!layerVisible.roof;
-      scene3.add(roofGroup);
-
-      const roofMat=sketchMat(P.roof,{side:THREE.DoubleSide});
-      const ceilMat=sketchMat(P.slab,{side:THREE.DoubleSide});
-
-      // Footprint in group-local coords (group centred at rx+rw/2, rz+rh/2)
-      const x0=-rw/2-ov, x1=rw/2+ov, z0=-rh/2-ov, z1=rh/2+ov;
-      const fw3=x1-x0, fd3=z1-z0;
-
-      // addRF: add mesh to roofGroup (tagged via group)
-      const addRF=(mesh)=>{ roofGroup.add(mesh); return mesh; };
-
-      const addRoofFace=(verts,mat)=>{
-        // verts: array of {x,y,z} — build a flat polygon as BufferGeometry
-        const geo=new THREE.BufferGeometry();
-        // Triangulate as fan from first vertex
-        const positions=[];
-        for(let i=1;i<verts.length-1;i++){
-          positions.push(verts[0].x,verts[0].y,verts[0].z);
-          positions.push(verts[i].x,verts[i].y,verts[i].z);
-          positions.push(verts[i+1].x,verts[i+1].y,verts[i+1].z);
-        }
-        geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-        geo.computeVertexNormals();
-        const m=new THREE.Mesh(geo,mat);
-        m.castShadow=true; addRF(m);
-      };
-
-      const riseEW=((fd3/2)*(pitch/12)); // rise from eave to ridge for E-W ridge
-      const riseNS=((fw3/2)*(pitch/12)); // rise from eave to ridge for N-S ridge
-
-      if(rtype==='flat'){
-        // Thin flat slab
-        const geo=new THREE.BoxGeometry(fw3,0.3,fd3);
-        const m=new THREE.Mesh(geo,roofMat);
-        m.position.set(x0+fw3/2, roofBase+0.15, z0+fd3/2);
-        m.castShadow=true; addRF(m);
-
-      } else if(rtype==='shed'){
-        // Wedge: low at z0, high at z1
-        const rise=(fd3)*(pitch/12);
-        // 4 faces: bottom (ceiling), front (low), back (high), two sides, top
-        const yLo=roofBase, yHi=roofBase+rise;
-        addRoofFace([{x:x0,y:yLo,z:z0},{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x0,y:yHi,z:z1}], roofMat); // top surface
-        addRoofFace([{x:x0,y:yLo,z:z0},{x:x1,y:yLo,z:z0},{x:x1,y:yLo,z:z0}], ceilMat); // front (flat wall triangle at low end)
-        // Gable ends (triangles at sides)
-        addRoofFace([{x:x0,y:yLo,z:z0},{x:x0,y:yHi,z:z1},{x:x0,y:yLo,z:z1}], roofMat);
-        addRoofFace([{x:x1,y:yLo,z:z0},{x:x1,y:yHi,z:z1},{x:x1,y:yLo,z:z1}], roofMat);
-        // Fascia boards (front low edge, back high edge)
-        const fas=new THREE.BoxGeometry(fw3,0.15,0.1);
-        const flo=new THREE.Mesh(fas,roofMat); flo.position.set(x0+fw3/2,yLo+0.075,z0); addRF(flo);
-        const fhi=new THREE.Mesh(fas,roofMat); fhi.position.set(x0+fw3/2,yHi+0.075,z1); addRF(fhi);
-
-      } else if(rtype==='gable'){
-        if(ridgeDir==='EW'){
-          // Ridge runs east-west at midpoint of depth (z)
-          const zMid=z0+fd3/2, yRidge=roofBase+riseEW;
-          // South slope: z0 → zMid
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:x1,y:yRidge,z:zMid},{x:x0,y:yRidge,z:zMid}], roofMat);
-          // North slope: zMid → z1
-          addRoofFace([{x:x0,y:yRidge,z:zMid},{x:x1,y:yRidge,z:zMid},{x:x1,y:roofBase,z:z1},{x:x0,y:roofBase,z:z1}], roofMat);
-          // Gable ends (triangles at east and west)
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:yRidge,z:zMid},{x:x0,y:roofBase,z:z1}], roofMat);
-          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:yRidge,z:zMid},{x:x1,y:roofBase,z:z1}], roofMat);
-          // Ridge board
-          const ridgeGeo=new THREE.BoxGeometry(fw3,0.15,0.1);
-          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set(x0+fw3/2,yRidge+0.075,zMid); addRF(ridgeMesh);
-        } else {
-          // Ridge runs north-south at midpoint of width (x)
-          const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:xMid,y:yRidge,z:z0},{x:xMid,y:yRidge,z:z1},{x:x0,y:roofBase,z:z1}], roofMat);
-          addRoofFace([{x:xMid,y:yRidge,z:z0},{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1}], roofMat);
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:xMid,y:yRidge,z:z0},{x:x1,y:roofBase,z:z0}], roofMat);
-          addRoofFace([{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:z1},{x:x1,y:roofBase,z:z1}], roofMat);
-          const ridgeGeo=new THREE.BoxGeometry(0.1,0.15,fd3);
-          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set(xMid,yRidge+0.075,z0+fd3/2); addRF(ridgeMesh);
-        }
-
-      } else if(rtype==='hip'){
-        // Hip: all 4 sides slope inward to a central ridge
-        // Ridge is shorter than the building, runs along the longer axis
-        const useEW=fw3>=fd3; // ridge along longer dimension
-        if(useEW){
-          const zMid=z0+fd3/2, yRidge=roofBase+riseEW;
-          const ridgeHalf=(fw3-fd3)/2; // ridge starts/ends inset from corners
-          const xRidL=x0+ridgeHalf, xRidR=x1-ridgeHalf;
-          // South face (trapezoid)
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:xRidR,y:yRidge,z:zMid},{x:xRidL,y:yRidge,z:zMid}], roofMat);
-          // North face (trapezoid)
-          addRoofFace([{x:x0,y:roofBase,z:z1},{x:x1,y:roofBase,z:z1},{x:xRidR,y:yRidge,z:zMid},{x:xRidL,y:yRidge,z:zMid}], roofMat);
-          // West hip (triangle)
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:roofBase,z:z1},{x:xRidL,y:yRidge,z:zMid}], roofMat);
-          // East hip (triangle)
-          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xRidR,y:yRidge,z:zMid}], roofMat);
-          // Ridge board
-          const ridgeGeo=new THREE.BoxGeometry(xRidR-xRidL,0.12,0.1);
-          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set((xRidL+xRidR)/2,yRidge+0.06,zMid); addRF(ridgeMesh);
-        } else {
-          const xMid=x0+fw3/2, yRidge=roofBase+riseNS;
-          const ridgeHalf=(fd3-fw3)/2;
-          const zRidT=z0+ridgeHalf, zRidB=z1-ridgeHalf;
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x1,y:roofBase,z:z0},{x:xMid,y:yRidge,z:zRidT}], roofMat);
-          addRoofFace([{x:x0,y:roofBase,z:z1},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB}], roofMat);
-          addRoofFace([{x:x0,y:roofBase,z:z0},{x:x0,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
-          addRoofFace([{x:x1,y:roofBase,z:z0},{x:x1,y:roofBase,z:z1},{x:xMid,y:yRidge,z:zRidB},{x:xMid,y:yRidge,z:zRidT}], roofMat);
-          const ridgeGeo=new THREE.BoxGeometry(0.1,0.12,zRidB-zRidT);
-          const ridgeMesh=new THREE.Mesh(ridgeGeo,roofMat);
-          ridgeMesh.position.set(xMid,yRidge+0.06,(zRidT+zRidB)/2); addRF(ridgeMesh);
-        }
-      }
-    } else if(el.type==='member'){
-      // ── Timber frame member 3D rendering ────────────────────────
-      const sw=el.sectionW/12, sh=el.sectionH/12; // section inches → feet
-      const timberMat=sketchMat(P.timber);
-      const postMat  =sketchMat(P.post);
-      const addFM=(mesh)=>{
-        mesh.userData.fp=true; mesh.userData.isFrame=true;
-        mesh.visible=!!layerVisible.frame; scene3.add(mesh); return mesh;
-      };
-      if(el.role==='post'){
-        const pH=el.memberHeight!=null?el.memberHeight:wallH;
-        const px=el.x1/PX_PER_FT-cx, pz=el.y1/PX_PER_FT-cz;
-        const m=new THREE.Mesh(new THREE.BoxGeometry(sw,pH,sh),postMat);
-        m.position.set(px,yBase+pH/2,pz); m.castShadow=true; addFM(m);
-        const bp=new THREE.Mesh(new THREE.BoxGeometry(sw+0.1,0.08,sh+0.1),postMat);
-        bp.position.set(px,yBase+0.04,pz); addFM(bp);
-      } else {
-        const lx1=el.x1/PX_PER_FT-cx, lz1=el.y1/PX_PER_FT-cz;
-        const lx2=el.x2/PX_PER_FT-cx, lz2=el.y2/PX_PER_FT-cz;
-        const mdx=lx2-lx1, mdz=lz2-lz1, hLen=Math.hypot(mdx,mdz);
-        if(hLen>=0.01){
-          let mElev=el.memberElev!=null?el.memberElev:wallH;
-          if(el.role==='ridge'){
-            const rmx=(el.x1+el.x2)/2, rmz=(el.y1+el.y2)/2;
-            const under=elements.find(r=>r.type==='roof'&&
-              r.x/PX_PER_FT-cx<rmx&&(r.x+r.w)/PX_PER_FT-cx>rmx&&
-              r.y/PX_PER_FT-cz<rmz&&(r.y+r.h)/PX_PER_FT-cz>rmz);
-            if(under){const span=Math.min(under.w,under.h)/PX_PER_FT;mElev=wallH+(span/2)*(under.pitch??6)/12;}
-          }
-          const planAng=Math.atan2(mdz,mdx);
-          // Terrain height at both endpoints — zero if member is fixed to floor
-          const _ft=getFollowTerrain(el);
-          const yTerr1=_ft?slopeOffset(lx1,lz1):0;
-          const yTerr2=_ft?slopeOffset(lx2,lz2):0;
-          const y1world=yTerr1+mElev;
-          const y2world=yTerr2+mElev;
-          const yMidWorld=(y1world+y2world)/2;
-          const dyWorld=y2world-y1world;
-
-          if(el.role==='brace'){
-            const hRun=(el.braceRun!=null)?el.braceRun:hLen;
-            const springH=(el.braceSpring!=null)?el.braceSpring:wallH*(2/3);
-            const vRise=hRun; // 45° locally
-            // Both endpoints sit at terrain of post
-            const ySpring1=yTerr1+springH;
-            const yBeam1  =yTerr1+mElev;
-            const yBotMid=(ySpring1+yBeam1)/2;
-            // Total diagonal in 3D: horizontal run + vertical rise + any slope delta
-            const slopeDelta=(yTerr2-yTerr1);
-            const diagLen=Math.hypot(hRun, vRise);
-            const m=new THREE.Mesh(new THREE.BoxGeometry(diagLen,sh,sw),timberMat);
-            m.position.set((lx1+lx2)/2, yBotMid, (lz1+lz2)/2);
-            m.rotation.y=-planAng;
-            m.rotation.z=Math.atan2(vRise, hRun);
-            m.castShadow=true; addFM(m);
-          } else {
-            // Beam / plate / ridge: tilted to follow the slope between endpoints
-            // Use a Group to apply both plan rotation and slope tilt cleanly
-            const grp=new THREE.Group();
-            grp.position.set((lx1+lx2)/2, yMidWorld-sh/2, (lz1+lz2)/2);
-            grp.rotation.y=-planAng;
-            // Slope tilt angle in elevation (rise/run along the member direction)
-            grp.rotation.z=-Math.atan2(dyWorld, hLen);
-            const m=new THREE.Mesh(new THREE.BoxGeometry(hLen,sh,sw),timberMat);
-            m.castShadow=true;
-            grp.add(m);
-            grp.userData.fp=true; grp.userData.isFrame=true;
-            grp.visible=!!layerVisible.frame; scene3.add(grp);
-          }
-        }
-      }
-    } else if(el.type==='furniture'){
-      const fx2=el.x/PX_PER_FT-cx, fz2=el.y/PX_PER_FT-cz;
-      const fw=el.fw, fh=el.fh, ang=-(el.angle||0), t=el.ftype;
-      const G=new THREE.Group(); G.position.set(fx2,yBase,fz2); G.rotation.y=ang; if(el.flip)G.scale.x=-1; addFP(G,fl,el);
-      const mat=(col,rough=0.8)=>sketchMat(col);
-      const box3=(w,h,d,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col));m.position.set(x,y,z);m.castShadow=true;G.add(m);return m;};
-      const cyl3=(r,h,col,x=0,y=0,z=0,segs=12)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,segs),mat(col));m.position.set(x,y,z);G.add(m);return m;};
-      const sph3=(r,col,x=0,y=0,z=0)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),mat(col));m.position.set(x,y,z);G.add(m);return m;};
-
-      if(t==='single-bed'||t==='double-bed'){
-        const bh=fh*0.95, mh=0.25, fh2=0.45, hbH=0.9;
-        box3(fw,mh,bh,0x5a3c22,0,mh/2,0);       // frame base
-        box3(fw,fh2,bh,0xe8ddd0,0,mh+fh2/2,0);  // mattress
-        box3(fw,hbH,0.12,0x5a3c22,0,mh+hbH/2,-bh/2+0.08); // headboard
-        box3(fw,0.3,0.12,0x5a3c22,0,mh+0.15, bh/2-0.08);  // footboard
-        if(t==='double-bed'){
-          box3(fw*0.45,0.18,bh*0.55,0xf5f0ea,fw*-0.23,mh+fh2+0.09,-bh*0.1); // pillow L
-          box3(fw*0.45,0.18,bh*0.55,0xf5f0ea,fw* 0.23,mh+fh2+0.09,-bh*0.1); // pillow R
-        } else {
-          box3(fw*0.7,0.16,bh*0.5,0xf5f0ea,0,mh+fh2+0.08,-bh*0.1);
-        }
-        box3(fw,0.06,bh,0x8a6a50,0,mh+fh2+0.03,0); // blanket top
-
-      } else if(t==='bunk-bed'){
-        const bh=fh; const mh=0.18; const fh2=0.32; const slH=0.7;
-        box3(fw,mh,bh,0x5a3c22,0,mh/2,0);
-        box3(fw,fh2,bh,0xddd5c8,0,mh+fh2/2,0);
-        box3(fw,mh,bh,0x5a3c22,0,slH+mh/2,0);
-        box3(fw,fh2,bh,0xddd5c8,0,slH+mh+fh2/2,0);
-        for(const lx of[-fw/2+0.06, fw/2-0.06]){
-          box3(0.08,slH+mh*2+fh2*2,0.08,0x5a3c22,lx,(slH+mh*2+fh2*2)/2,-bh/2+0.04);
-          box3(0.08,slH+mh*2+fh2*2,0.08,0x5a3c22,lx,(slH+mh*2+fh2*2)/2, bh/2-0.04);
-        }
-        // ladder
-        box3(0.06,slH,0.06,0x6b4c2a,fw/2+0.04,slH/2,-bh*0.3);
-        for(let ri=0;ri<3;ri++) box3(0.12,0.04,0.06,0x8a6040,fw/2+0.04,slH*(0.2+ri*0.3),-bh*0.3);
-
-      } else if(t==='crib'){
-        const bh=fh; const slH=0.7;
-        box3(fw,0.08,bh,0xd4b896,0,0.04,0); // base
-        const bars=8; for(let i=0;i<=bars;i++){box3(0.04,slH,0.04,0xc8a07a,fw*(-0.5+i/bars),slH/2,-bh/2+0.02);box3(0.04,slH,0.04,0xc8a07a,fw*(-0.5+i/bars),slH/2,bh/2-0.02);}
-        box3(fw,0.06,0.06,0xc8a07a,0,slH,-bh/2+0.02);
-        box3(fw,0.06,0.06,0xc8a07a,0,slH, bh/2-0.02);
-
-      } else if(t==='sofa'){
-        const sh=0.55, sw=0.48, aw=fw*0.15, ah=0.65, backH=0.65;
-        box3(fw,sh,fh,0x4a5c7a,0,sh/2,0);                       // seat
-        box3(fw,backH,0.2,0x3a4c6a,0,sh+backH/2,-fh/2+0.1);     // backrest
-        box3(aw,ah,fh,0x3a4c6a,-fw/2+aw/2,ah/2,0);               // left arm
-        box3(aw,ah,fh,0x3a4c6a, fw/2-aw/2,ah/2,0);               // right arm
-        // cushions
-        const nc=Math.max(2,Math.round(fw/0.7)); const cw=(fw-aw*2)/nc;
-        for(let i=0;i<nc;i++) box3(cw*0.92,sh*0.55,fh*0.85,0x5a6c8a,-fw/2+aw+cw*(i+0.5),sh*0.72+sh*0.27,0);
-
-      } else if(t==='l-sofa'){
-        // Two sofa sections
-        const sh=0.55; const aw=fw*0.12;
-        box3(fw,sh,fh*0.42,0x3d4f6a,0,sh/2,fh*0.29);
-        box3(fw*0.42,sh,fh,0x3d4f6a,fw*-0.29,sh/2,0);
-        box3(fw*0.42,0.65,0.18,0x2d3f5a,fw*-0.29,sh+0.32,-fh/2+0.1);
-        box3(0.18,0.65,fh,0x2d3f5a,-fw/2+0.09,sh+0.32,0);
-
-      } else if(t==='armchair'){
-        const sh=0.5, aw=fw*0.18, ah=0.6, backH=0.6;
-        box3(fw,sh,fh,0x5a6b8a,0,sh/2,0);
-        box3(fw,backH,0.18,0x4a5b7a,0,sh+backH/2,-fh/2+0.09);
-        box3(aw,ah,fh,0x4a5b7a,-fw/2+aw/2,ah/2,0);
-        box3(aw,ah,fh,0x4a5b7a, fw/2-aw/2,ah/2,0);
-        box3(fw-aw*2,sh*0.5,fh*0.85,0x6a7b9a,0,sh*0.75,fh*0.05);
-
-      } else if(t==='office-chair'){
-        const r=Math.min(fw,fh)/2;
-        cyl3(r*0.9,0.12,0x222222,0,0.06,0);    // seat
-        cyl3(r*0.75,0.08,0x333333,0,0.18,0);   // seat top
-        cyl3(0.04,0.55,0x555555,0,0.35+0.275,0); // post
-        cyl3(0.06,0.08,0x444444,0,0.62,0);      // tilt housing
-        // 5 caster arms
-        for(let i=0;i<5;i++){const a=i*Math.PI*2/5;const ax=Math.cos(a)*r*0.65,az=Math.sin(a)*r*0.65;box3(0.06,0.04,r*0.65,0x444444,ax/2,0.04,az/2);sph3(0.05,0x333333,ax,0.03,az);}
-        // backrest
-        box3(fw*0.85,0.55,0.06,0x222222,0,0.7+0.275,fh*-0.3);
-        cyl3(0.04,0.4,0x444444,0,0.55+0.275,fh*-0.3+0.05);
-
-      } else if(t==='dining-table'){
-        const th=0.1, legH=0.7, legR=0.04;
-        box3(fw,th,fh,0x8b6914,0,legH+th/2,0);
-        for(const[lx,lz] of [[-fw/2+0.1,-fh/2+0.1],[-fw/2+0.1,fh/2-0.1],[fw/2-0.1,-fh/2+0.1],[fw/2-0.1,fh/2-0.1]])
-          cyl3(legR,legH,0x7a5a0a,lx,legH/2,lz);
-
-      } else if(t==='desk'){
-        const th=0.08, legH=0.7;
-        box3(fw,th,fh,0x9a7a3a,0,legH+th/2,0);
-        box3(fw*0.35,legH,th,0x8a6a2a,-fw/2+fw*0.35/2,legH/2,-fh/2+th/2); // left panel
-        for(const lz of[-fh/2+0.06, fh/2-0.06]) cyl3(0.04,legH,0x8a6a2a,fw/2-0.08,legH/2,lz);
-        // drawer unit
-        box3(fw*0.3,legH*0.75,fh*0.4,0xb0903a,-fw/2+fw*0.3/2+0.02,legH*0.75/2,fh*0.2);
-        for(let di=0;di<3;di++) box3(fw*0.26,0.12,0.04,0xc8a840,-fw/2+fw*0.3/2+0.02,legH*0.75*(0.15+di*0.3),fh*0.2+fh*0.2-0.02);
-
-      } else if(t==='coffee-table'){
-        const th=0.06, legH=0.38;
-        box3(fw,th,fh,0xa08040,0,legH+th/2,0);
-        for(const[lx,lz] of[[-fw/2+0.08,-fh/2+0.08],[-fw/2+0.08,fh/2-0.08],[fw/2-0.08,-fh/2+0.08],[fw/2-0.08,fh/2-0.08]])
-          box3(0.06,legH,0.06,0x906030,lx,legH/2,lz);
-
-      } else if(t==='wardrobe'){
-        box3(fw,2.1,fh,0xb09060,0,1.05,0);
-        box3(fw,0.06,fh,0x906040,0,2.13,0); // top
-        box3(0.04,2.1,fh,0x907050,0,1.05,0); // centre divider
-        box3(fw,0.06,fh,0x906040,0,0.03,0);  // bottom
-        sph3(0.04,0xd4af37,-fw*0.24,1.05,fh/2+0.02);
-        sph3(0.04,0xd4af37, fw*0.24,1.05,fh/2+0.02);
-
-      } else if(t==='bookshelf'){
-        box3(fw,2.1,fh,0xa08050,0,1.05,0);
-        for(let si=0;si<4;si++) box3(fw,0.04,fh,0x806030,0,0.4+si*0.55,0);
-        // book spines per shelf
-        for(let si=0;si<4;si++){const sy=0.4+si*0.55+0.22;const nB=Math.round(fw/0.12);for(let bi=0;bi<nB;bi++){const bc=[0xc8302a,0x2860c8,0x28a028,0xc87820,0x882888,0xc8c828][bi%6];box3(0.08,0.32+Math.random()*0.1,fh*0.85,bc,-fw/2+0.08*(bi+0.5),sy,0);}}
-
-      } else if(t==='kitchen-counter'){
-        box3(fw,0.75,fh,0xd0c8b0,0,0.375,0);        // cabinet body
-        box3(fw+0.04,0.05,fh+0.04,0xe8e0d0,0,0.77,0); // countertop overhang
-        // hob (2 burners)
-        box3(fw*0.55,0.03,fh*0.6,0x555555,fw*0.05,0.785,0);
-        for(const[bx,bz] of [[-fw*0.1,-fh*0.1],[-fw*0.1,fh*0.1],[fw*0.2,-fh*0.1],[fw*0.2,fh*0.1]])
-          cyl3(fw*0.1,0.04,0x333333,bx,0.81,bz,10);
-        // door handles
-        for(const[dx] of[[-fw*0.25],[fw*0.25]]) cyl3(0.02,fw*0.35,0xd4af37,dx,0.45,fh/2+0.03);
-
-      } else if(t==='kitchen-island'){
-        box3(fw,0.78,fh,0xc8c0a8,0,0.39,0);
-        box3(fw+0.06,0.05,fh+0.06,0xe0d8c0,0,0.81,0);
-        for(const[bx,bz] of[[-fw*0.22,0],[fw*0.22,0],[0,-fh*0.18],[0,fh*0.18]])
-          cyl3(fw*0.09,0.04,0x3a3a3a,bx,0.84,bz,10);
-
-      } else if(t==='fridge'){
-        box3(fw,1.5,fh,0xe0e0e0,0,0.75,0);   // bottom (fridge)
-        box3(fw,0.9,fh,0xd8d8d8,0,1.5+0.45,0); // top (freezer)
-        box3(0.03,2.35,0.03,0xd4af37,fw/2-0.08,2.35/2,fh/2+0.02); // handle
-        box3(fw*0.9,0.02,fh*0.9,0x999999,0,0.5,fh/2-0.01); // door line
-
-      } else if(t==='oven'){
-        box3(fw,0.75,fh,0x888888,0,0.375,0);
-        box3(fw*0.8,0.38,fh*0.5,0x222222,0,0.375+0.19,0.02); // oven window
-        for(const kx of[-fw*0.3,0,fw*0.3]) cyl3(0.05,0.06,0xcccccc,kx,0.72,fh/2+0.01,8);
-        // cooktop
-        box3(fw,0.04,fh,0x555555,0,0.77,0);
-        for(const[bx,bz] of[[-fw*0.25,-fh*0.25],[-fw*0.25,fh*0.25],[fw*0.25,-fh*0.25],[fw*0.25,fh*0.25]])
-          cyl3(fw*0.12,0.05,0x333333,bx,0.8,bz,10);
-
-      } else if(t==='toilet'){
-        box3(fw*0.9,0.3,fh*0.35,0xf5f2ee,0,0.15,-fh*0.3);  // tank
-        const seat=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.45,fw*0.5,0.08,16,1,false,0,Math.PI*2),mat(0xeeeae4));
-        seat.scale.z=fh*0.65/(fw*0.95); seat.position.set(0,0.28,fh*0.08); G.add(seat);
-        const bowl=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.35,fw*0.42,0.22,16),mat(0xf5f2ee));
-        bowl.scale.z=fh*0.5/(fw*0.8); bowl.position.set(0,0.11,fh*0.08); G.add(bowl);
-
-      } else if(t==='bathtub'){
-        // tub shell
-        const outer=new THREE.Mesh(new THREE.BoxGeometry(fw,0.55,fh),mat(0xe8e8f5));
-        outer.position.set(0,0.275,0); G.add(outer);
-        const inner=new THREE.Mesh(new THREE.BoxGeometry(fw*0.88,0.4,fh*0.85),mat(0x9cc8e8));
-        inner.position.set(0,0.38,fh*0.02); G.add(inner);
-        // tap end
-        cyl3(0.04,0.22,0xc8c8c8,fw*0.3,0.55+0.11,-fh/2+0.12);
-        cyl3(0.02,0.1,0xd4af37,fw*0.3,0.55+0.22,-fh/2+0.12);
-        box3(fw,0.06,0.06,0xe0e0f0,0,0.58,fh/2-0.04); // rim
-
-      } else if(t==='shower'){
-        // tray
-        box3(fw,0.08,fh,0xd8d8d8,0,0.04,0);
-        // glass walls (3 sides, open 1 for entry)
-        const gm=new THREE.MeshBasicMaterial({color:P.glass,transparent:true,opacity:0.35,side:THREE.DoubleSide});
-        for(const[gw,gh,gd,gx,gy,gz] of [[fw,1.9,0.04,0,1.9/2,-fh/2+0.02],[fw,1.9,0.04,0,1.9/2,fh/2-0.02],[0.04,1.9,fh,fw/2-0.02,1.9/2,0]]){
-          const gls=new THREE.Mesh(new THREE.BoxGeometry(gw,gh,gd),gm);gls.position.set(gx,gy,gz);G.add(gls);
-        }
-        // shower head
-        cyl3(0.04,0.6,0xc8c8c8,fw*0.3,1.7,-fh*0.3);
-        cyl3(0.12,0.04,0x999999,fw*0.3,2.0,-fh*0.3);
-
-      } else if(t==='sink'){
-        box3(fw,0.78,fh,0xe8e8ec,0,0.39,0);
-        box3(fw*0.72,0.04,fh*0.65,0xd8d8dc,0,0.78,0);
-        const basin=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.28,fw*0.3,0.2,16),mat(0xccccd0));
-        basin.position.set(0,0.7,fh*0.05); G.add(basin);
-        cyl3(0.02,0.18,0xc8c8c8,0,0.9,fh/2-0.12);
-
-      } else if(t==='double-sink'){
-        box3(fw,0.78,fh,0xe8e8ec,0,0.39,0);
-        box3(fw,0.04,fh*0.65,0xd8d8dc,0,0.78,0);
-        for(const sx of[-fw*0.26,fw*0.26]){
-          const basin=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.18,fw*0.2,0.18,16),mat(0xccccd0));
-          basin.position.set(sx,0.7,0); G.add(basin);
-          cyl3(0.02,0.15,0xc8c8c8,sx,0.9,fh/2-0.1);
-        }
-
-      // ── Outdoor ──
-      } else if(t==='balcony'||t==='deck'){
-        const planks=Math.ceil(fw/0.15);
-        for(let i=0;i<planks;i++){
-          const pc=t==='deck'?0x8b6914:0xa07838;
-          box3(fw/planks*0.88,0.06,fh,pc,-fw/2+fw/planks*(i+0.5),0.03,0);
-        }
-        // railing posts
-        const posts=Math.ceil(fw/0.8);
-        for(let i=0;i<=posts;i++){
-          const px=-fw/2+fw*i/posts;
-          box3(0.06,0.9,0.06,0xd4b896,px,0.06+0.45,-fh/2+0.04);
-          box3(0.06,0.9,0.06,0xd4b896,px,0.06+0.45, fh/2-0.04);
-        }
-        box3(fw+0.06,0.06,0.06,0xd4b896,0,0.06+0.9,-fh/2+0.04);
-        box3(fw+0.06,0.06,0.06,0xd4b896,0,0.06+0.9, fh/2-0.04);
-
-      } else if(t==='patio'){
-        const tile=Math.min(fw,fh)/4;
-        const nx=Math.ceil(fw/tile), nz=Math.ceil(fh/tile);
-        for(let xi=0;xi<nx;xi++) for(let zi=0;zi<nz;zi++){
-          const alt=(xi+zi)%2;
-          box3(tile*0.97,0.06,tile*0.97,alt?0xd8cdb5:0xccc0a0,-fw/2+tile*(xi+0.5),0.03,-fh/2+tile*(zi+0.5));
-        }
-
-      } else if(t==='pool'){
-        const pm=new THREE.MeshBasicMaterial({color:0x6aB4D8,transparent:true,opacity:0.75});
-        const pool=new THREE.Mesh(new THREE.CylinderGeometry(fw/2,fw/2,0.25,32),pm);
-        pool.scale.z=fh/fw; pool.position.set(0,0.125,0); G.add(pool);
-        // pool surround
-        const rim=new THREE.Mesh(new THREE.CylinderGeometry(fw/2+0.12,fw/2+0.12,0.08,32),mat(0xd8cdb5));
-        rim.scale.z=fh/fw; rim.position.set(0,0.04,0); G.add(rim);
-
-      } else if(t==='hot-tub'){
-        box3(fw,0.5,fh,0xD4C4A0,0,0.25,0);
-        const inner=new THREE.MeshBasicMaterial({color:0x7aC4E8,transparent:true,opacity:0.7});
-        const ht=new THREE.Mesh(new THREE.CylinderGeometry(fw*0.4,fw*0.4,0.35,20),inner);
-        ht.scale.z=fh/fw; ht.position.set(0,0.35,0); G.add(ht);
-        // jets
-        for(let i=0;i<6;i++){const a=i*Math.PI/3;cyl3(0.04,0.06,0xd8d8d8,Math.cos(a)*fw*0.3,0.5,Math.sin(a)*fh*0.3);}
-
-      } else if(t==='tree'){
-        const tr=Math.min(fw,fh)/2;
-        // trunk
-        cyl3(tr*0.15,tr*0.9,0x8C6030,0,tr*0.45,0);
-        // canopy layers
-        for(const[r,y,col] of [[tr*0.9,tr*0.9+0.1,0x6A9840],[tr*0.72,tr*1.25,0x7AAA50],[tr*0.5,tr*1.55,0x8ABE60]]){
-          const cm=new THREE.Mesh(new THREE.ConeGeometry(r,r*0.9,12),mat(col));
-          cm.position.set(0,y,0); G.add(cm);
-        }
-
-      } else if(t==='shrub'){
-        const sr=Math.min(fw,fh)/2;
-        for(const[x,z,r,col] of [[0,0,sr*0.78,0x8AB84A],[-sr*0.36,-sr*0.22,sr*0.52,0x78A83A],[sr*0.30,-sr*0.16,sr*0.48,0x9AC85A]]){
-          const sm=new THREE.Mesh(new THREE.SphereGeometry(r,8,6),sketchMat(col));
-          sm.position.set(x,r*0.65,z); G.add(sm);
-        }
-      } else if(t==='garden-bed'){
-        box3(fw,0.18,fh,0x6b3d12,0,0.09,0); // soil
-        const nPlants=Math.max(2,Math.round(fw/0.5));
-        for(let i=0;i<nPlants;i++){
-          const px=-fw/2+fw*(i+0.5)/nPlants;
-          cyl3(0.03,0.3,0x2d7a1a,px,0.18+0.15,0);
-          sph3(0.12,0x28a028,px,0.18+0.3,0);
-        }
-
-      } else if(t==='driveway'){
-        box3(fw,0.04,fh,0x888880,0,0.02,0);
-        box3(fw*0.04,0.05,fh,0xffff88,0,0.025,0); // centre line
-
-      } else if(t==='path'){
-        const steps=Math.ceil(fh/0.4);
-        for(let i=0;i<steps;i++) box3(fw*0.88,0.04,fh/steps*0.88,0xd4c89c,0,0.02,-fh/2+fh/steps*(i+0.5));
-
-      } else if(t==='graded-area'){
-        // Simple flat concrete pad
-        box3(fw, 0.15, fh, 0xc8c0b0, 0, 0.075, 0);
-
-      } else if(t==='stairs-straight'||t==='stairs-landing'||t==='stairs-l'){
-        const stairH=wallH, stairW=fw, treadD=fh;
-        if(t==='stairs-straight'){
-          // Floating tread slabs — full width, +Z, rising 0→stairH
-          const nT     = Math.max(4, Math.round(treadD*2.5));
-          const rH     = stairH/nT;
-          const tD     = treadD/nT;
-          const tSlabH = Math.max(0.06, rH*0.18);
-          for(let i=0;i<nT;i++)
-            box3(stairW, tSlabH, tD, 0xe0d8c0, 0, rH*i+tSlabH/2, -treadD/2+tD*(i+0.5));
-        } else if(t==='stairs-landing'){
-          // Switchback stairs — free-floating tread slabs only, no fill.
-          //
-          // Top-down plan:
-          //   ┌────────┬────────┐   ← zBot (near edge, both runs start here)
-          //   │ Run 1  │ Run 2  │
-          //   │ x<0    │ x>0    │
-          //   │ rise↑  │ rise↑  │   (both climb toward the landing)
-          //   │ →→→→→  │ ←←←←←  │   (run1 travels +Z, run2 travels -Z toward landing)
-          //   ├────────┴────────┤   ← zLand (far edge, landing sits here)
-          //   │    LANDING      │
-          //   └─────────────────┘
-          //
-          // Run 1 (left, x = -runW/2): treads at z = zBot..zLand, travel +Z, rise 0→stairH/2
-          // Run 2 (right, x = +runW/2): treads at z = zBot..zLand, travel -Z (from zLand back),
-          //                              rise stairH/2→stairH
-          // Landing (full width): sits at z = zLand..zTop, height = stairH/2
-
-          const runW   = stairW / 2;
-          const landD  = runW;                      // landing is square (runW × runW)
-          const runD   = treadD - landD;            // both runs share same Z range (zBot→zLand)
-          const nT     = Math.max(4, Math.round(runD * 2.5));
-          const rH     = (stairH / 2) / nT;
-          const tSlabH = Math.max(0.06, rH * 0.18);
-          const tD     = runD / nT;
-
-          const zBot  = -treadD / 2;               // near edge — bottom of both runs
-          const zLand = zBot + runD;               // far edge of runs = near edge of landing
-          const zTop  = zLand + landD;             // far edge of landing = far edge of footprint
-
-          const treadC = 0xe0d8c0;
-
-          // ── Run 1: left half (x<0), marches +Z from zBot toward zLand ─────────
-          for(let i = 0; i < nT; i++){
-            const y = rH * i;
-            const z = zBot + tD * (i + 0.5);
-            box3(runW, tSlabH, tD, treadC, -runW/2, y + tSlabH/2, z);
-          }
-
-          // ── Run 2: right half (x>0), marches -Z from zLand back toward zBot ───
-          // Tread i=0 is adjacent to the landing (at zLand), rising from stairH/2.
-          // Each subsequent tread steps back toward zBot and rises further.
-          for(let i = 0; i < nT; i++){
-            const y = stairH/2 + rH * i;
-            const z = zLand - tD * (i + 0.5);     // starts near zLand, marches toward zBot
-            box3(runW, tSlabH, tD, treadC, runW/2, y + tSlabH/2, z);
-          }
-
-          // ── Landing: full width at zLand, height = stairH/2 ───────────────────
-          box3(stairW, tSlabH, landD, treadC, 0, stairH/2 + tSlabH/2, zLand + landD/2);
-
-        } else {
-          // L-stairs: floating slabs. fw=8, fh=8.
-          // Run 1: full width (fw), +Z from z=-fh/2 to z=0, rises 0→stairH/2
-          // Landing: square left-half (fw/2 × fh/2) at z=0..fh/2, height=stairH/2
-          // Run 2: left half (fw/2), +Z from z=0 to z=fh/2, rises stairH/2→stairH
-          const tC = 0xe0d8c0, lC = 0xd8d0b8;
-
-          const nT1=Math.max(4,Math.round((fh/2)*2.5));
-          const rH1=(stairH/2)/nT1, tD1=(fh/2)/nT1, tS1=Math.max(0.06,rH1*0.18);
-          for(let i=0;i<nT1;i++)
-            box3(fw, tS1, tD1, tC, 0, rH1*i+tS1/2, -fh/2+tD1*(i+0.5));
-
-          // Landing square at far end of run1, left half
-          box3(fw/2, tS1, fh/2, lC, -fw/4, stairH/2+tS1/2, fh/4);
-
-          const nT2=Math.max(4,Math.round((fh/2)*2.5));
-          const rH2=(stairH/2)/nT2, tD2=(fh/2)/nT2, tS2=Math.max(0.06,rH2*0.18);
-          for(let i=0;i<nT2;i++)
-            box3(fw/2, tS2, tD2, tC, -fw/4, stairH/2+rH2*i+tS2/2, tD2*(i+0.5));
-        }
-
-      } else if(t==='floor-cutout'){
-        // Floor cutout renders nothing as furniture — the hole is created by
-        // the slab rendering skipping geometry in this area. Nothing to add here.
-      } else {
-        // generic fallback box
-        box3(fw,0.5,fh,0x888888,0,0.25,0);
-      }
-    }
-  }
-
-  // Terrain mesh sized exactly to the lot, with 1 vertex per foot for precision.
-  // Slope runs from one end of the lot to the other.
-  const lotW3=parseFloat(document.getElementById('lot-w').value)||100;
-  const lotH3=parseFloat(document.getElementById('lot-h').value)||100;
-
-  // Terrain covers exactly the lot boundary — no margin.
-  // The 3D render is clipped to the lot extent.
-  const lotX1=-cx, lotX2=lotW3-cx;
-  const lotZ1=-cz, lotZ2=lotH3-cz;
-  const lotSW=lotW3, lotSD=lotH3; // lot dimensions in ft = scene units
-
-  // 2 segments per foot for flat-zone precision (capped at 500)
-  const segsX=Math.min(Math.round(lotSW*2), 500);
-  const segsZ=Math.min(Math.round(lotSD*2), 500);
-
-  // Flat zones: rooms and graded areas suppress the slope at their elevation
-  const flatZones=[];
-  elements.forEach(el=>{
-    if(el.type==='room'&&(el.floor||0)===0){
-      flatZones.push({
-        x1:el.x/PX_PER_FT-cx, x2:(el.x+el.w)/PX_PER_FT-cx,
-        z1:el.y/PX_PER_FT-cz, z2:(el.y+el.h)/PX_PER_FT-cz,
-        y: roomElev(el)
-      });
-    }
-    if(el.type==='furniture'&&el.ftype==='graded-area'){
-      const ex=el.x/PX_PER_FT-cx, ez=el.y/PX_PER_FT-cz;
-      flatZones.push({
-        x1:ex-el.fw/2, x2:ex+el.fw/2,
-        z1:ez-el.fh/2, z2:ez+el.fh/2,
-        y: el.elevation ?? 0
-      });
-    }
-  });
-
-  // Build geometry manually so vertices sit exactly on the lot grid
-  const terrainGeo=new THREE.PlaneGeometry(lotSW, lotSD, segsX, segsZ);
-  terrainGeo.rotateX(-Math.PI/2);
-  // PlaneGeometry centres at origin; offset so it covers lotX1→lotX2, lotZ1→lotZ2
-  terrainGeo.translate((lotX1+lotX2)/2, 0, (lotZ1+lotZ2)/2);
-
-  const pos=terrainGeo.attributes.position;
-  for(let i=0;i<pos.count;i++){
-    const vx=pos.getX(i), vz=pos.getZ(i);
-    let y=slopeOffset(vx,vz);
-    for(const fz of flatZones){
-      if(vx>=fz.x1&&vx<=fz.x2&&vz>=fz.z1&&vz<=fz.z2){ y=fz.y; break; }
-    }
-    pos.setY(i,y);
-  }
-  pos.needsUpdate=true;
-  terrainGeo.computeVertexNormals();
-
-  // ── Vertex-colored terrain for natural ground appearance ─────
-  // Blend grass/earth/rock colors per-vertex based on slope and elevation
-  const pos2=terrainGeo.attributes.position;
-  const vCount=pos2.count;
-
-  // Compute per-vertex normals for slope detection
-  terrainGeo.computeVertexNormals();
-  const norms=terrainGeo.attributes.normal;
-
-  // Build vertex color array
-  const colors=new Float32Array(vCount*3);
-  // Watercolor sketch palette — warm sage/ochre terrain
-  const grassCol   ={r:0.58,g:0.72,b:0.42}; // medium sage green
-  const dryCol     ={r:0.76,g:0.66,b:0.42}; // warm tan/ochre
-  const earthCol   ={r:0.80,g:0.70,b:0.52}; // warm paving earth
-  const rockCol    ={r:0.62,g:0.57,b:0.48}; // warm grey stone
-
-  for(let i=0;i<vCount;i++){
-    const vx=pos2.getX(i), vy=pos2.getY(i), vz=pos2.getZ(i);
-    const ny=norms.getY(i); // Y component of normal — 1=flat, 0=vertical
-
-    // Slope factor: 0=flat, 1=very steep
-    const slope=Math.max(0, 1-ny);
-
-    // Is this vertex inside a flat zone (building footprint)? If so, use earth tone
-    let inFlat=false;
-    for(const fz of flatZones){
-      if(vx>=fz.x1-0.1&&vx<=fz.x2+0.1&&vz>=fz.z1-0.1&&vz<=fz.z2+0.1){inFlat=true;break;}
-    }
-
-    // Blend: flat areas = grass, steep = earth/rock, building zones = bare earth
-    let r,g,b;
-    if(inFlat){
-      // Under/near buildings: warm paving tone
-      r=0.88; g=0.80; b=0.64;
-    } else {
-      // Smooth blend: gentle slope=grass, steep=earth transitioning to rock
-      const grassT=Math.max(0, 1-slope*3.5);
-      const earthT=Math.min(1, slope*2.5)*Math.max(0, 1-slope*1.5);
-      const rockT =Math.max(0, slope-0.5)*2;
-      const tot=grassT+earthT+rockT||1;
-      r=(grassCol.r*grassT+dryCol.r*earthT+rockCol.r*rockT)/tot;
-      g=(grassCol.g*grassT+dryCol.g*earthT+rockCol.g*rockT)/tot;
-      b=(grassCol.b*grassT+dryCol.b*earthT+rockCol.b*rockT)/tot;
-    }
-
-    // Subtle elevation-based variation: higher = slightly lighter/cooler
-    const elevT=Math.max(0,Math.min(1,(vy-slopeLo)/(Math.abs(slopeHi-slopeLo)+0.01)));
-    r+=elevT*0.03; g+=elevT*0.03; b+=elevT*0.02;
-
-    // Noise only when slope is applied — zero on flat terrain
-    const noiseAmt = (slopeLo===slopeHi) ? 0 : Math.min(0.035, slope*0.04);
-    const noise=(Math.sin(vx*1.9+vz*2.3)*0.6+Math.sin(vx*3.7-vz*1.3)*0.4)*noiseAmt;
-    colors[i*3  ]=Math.max(0,Math.min(1,r+noise));
-    colors[i*3+1]=Math.max(0,Math.min(1,g+noise*0.85));
-    colors[i*3+2]=Math.max(0,Math.min(1,b+noise*0.3));
-  }
-  terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
-
-  const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.88,metalness:0.0,side:THREE.FrontSide});
-  const grass=new THREE.Mesh(terrainGeo, terrainMat);
-  grass.receiveShadow=true; grass.userData.fp=true; scene3.add(grass);
-
-  // Find lowest terrain point for dirt fill — no brown poking above surface
-  let minTerrainY=0;
-  for(let i=0;i<vCount;i++) minTerrainY=Math.min(minTerrainY, pos2.getY(i));
-  const dirtDepth=Math.max(4, Math.abs(minTerrainY)+2);
-  const dirtMat=sketchMat(0x8B6840); // warm dirt
-  const dirt=new THREE.Mesh(new THREE.BoxGeometry(lotSW, dirtDepth, lotSD), dirtMat);
-  dirt.position.set((lotX1+lotX2)/2, minTerrainY-dirtDepth/2, (lotZ1+lotZ2)/2);
-  dirt.userData.fp=true; scene3.add(dirt);
-
-  // Lot boundary edge — thin dark curb at the perimeter to give a clean termination
-  const edgeMat=sketchMat(0x6B5840); // warm edge curb
-  const edgeH=0.15, edgeT=0.15;
-  const lotCX=(lotX1+lotX2)/2, lotCZ=(lotZ1+lotZ2)/2;
-  // N edge (z=lotZ1), S edge (z=lotZ2), W edge (x=lotX1), E edge (x=lotX2)
-  [
-    {w:lotSW+edgeT*2, d:edgeT, x:lotCX,  z:lotZ1-edgeT/2},
-    {w:lotSW+edgeT*2, d:edgeT, x:lotCX,  z:lotZ2+edgeT/2},
-    {w:edgeT, d:lotSD,         x:lotX1-edgeT/2, z:lotCZ},
-    {w:edgeT, d:lotSD,         x:lotX2+edgeT/2, z:lotCZ},
-  ].forEach(({w,d,x,z})=>{
-    const em=new THREE.Mesh(new THREE.BoxGeometry(w,edgeH,d),edgeMat);
-    em.position.set(x,-edgeH/2,z);
-    em.userData.fp=true; scene3.add(em);
-  });
-  applyFloorVisibility();
-}
-
-function makeSprite(title,sub,color){
-  const c=document.createElement('canvas'); c.width=256; c.height=72;
-  const cx=c.getContext('2d');
-  const r=(color>>16)&255,g=(color>>8)&255,b=color&255;
-  cx.fillStyle=`rgba(${r},${g},${b},0.82)`;cx.beginPath();cx.roundRect(3,3,250,66,10);cx.fill();
-  cx.fillStyle='rgba(255,255,255,0.92)';
-  if(title){cx.font='bold 20px sans-serif';cx.textAlign='center';cx.fillText(title,128,sub?29:40);}
-  if(sub){cx.font='15px sans-serif';cx.textAlign='center';cx.fillStyle='rgba(255,255,255,0.75)';cx.fillText(sub,128,title?54:40);}
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true}));
-  sp.scale.set(4.2,1.2,1); return sp;
-}
 
 resize();
 // Start with the lot nicely centred
 setTimeout(fitView, 50);
+
 </script>
-
-    <div class="dd-label">Structure</div>
-    <div class="tool-grid">
-      <button class="tool-tile" data-tool="room"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14"/></svg>Room</button>
-      <button class="tool-tile" data-tool="wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="5" x2="2" y2="13"/><line x1="16" y1="5" x2="16" y2="13"/></svg>Wall</button>
-      <button class="tool-tile" data-tool="floor-cutout"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" stroke-dasharray="2 2"/><line x1="2" y1="2" x2="16" y2="16"/><line x1="16" y1="2" x2="2" y2="16"/></svg>Floor void</button>
-      <button class="tool-tile" data-tool="half-wall"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="16" y2="12"/><line x1="2" y1="8" x2="2" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/><line x1="2" y1="8" x2="16" y2="8" stroke-dasharray="2 2"/></svg>Half-wall</button>
-    </div>
-    <div class="dd-label">Stairs</div>
-    <div class="tool-grid">
-      <button class="tool-tile" data-tool="stairs-straight"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><line x1="3" y1="5.5" x2="15" y2="5.5"/><line x1="3" y1="8.5" x2="15" y2="8.5"/><line x1="3" y1="11.5" x2="15" y2="11.5"/><polyline points="9,13 9,4 7,6" fill="none"/></svg>Straight</button>
-      <button class="tool-tile" data-tool="stairs-landing"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="12" height="14"/><line x1="3" y1="5.5" x2="15" y2="5.5"/><rect x="3" y="8" width="12" height="2" fill="currentColor" opacity=".2"/><line x1="3" y1="11.5" x2="15" y2="11.5"/><polyline points="9,13 9,4 7,6" fill="none"/></svg>Landing</button>
-      <button class="tool-tile" data-tool="stairs-l"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="7" height="9"/><rect x="2" y="9" width="14" height="7"/><line x1="2" y1="5" x2="9" y2="5"/><line x1="2" y1="7" x2="9" y2="7"/><line x1="6" y1="9" x2="6" y2="16"/><line x1="10" y1="9" x2="10" y2="16"/></svg>L-shaped</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>
