@@ -588,23 +588,49 @@ function drawGrid() {
 // DRAW HANDLES
 // ══════════════════════════════════════════════════
 function drawHandles(el) {
-  // Draw handles in screen space so they're always the same size regardless of zoom
+  // All handle drawing is now done in drawAllHandles() — this is a no-op
+}
+// ── Handle rendering — always in screen space, always on top ────────────────
+// Called once at the end of render2d AFTER ctx.restore() so no transform issues.
+function drawAllHandles() {
+  const els = [];
+  if (selected) els.push(selected);
+  else if (multiSel.length > 0) multiSel.forEach(e => els.push(e));
+  if (els.length === 0) return;
+
+  // Work in screen pixels — completely independent of canvas transform
   ctx.save();
-  ctx.resetTransform();
-  for (const h of getHandles(el)) {
-    const sx = h.cx * viewZoom + viewOX;
-    const sy = h.cy * viewZoom + viewOY;
-    ctx.lineWidth = 1.5;
-    if (h.type === 'resize') {
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3B82F6';
-      ctx.beginPath(); ctx.rect(sx-HR, sy-HR, HR*2, HR*2); ctx.fill(); ctx.stroke();
-    } else {
-      ctx.fillStyle = '#10B981'; ctx.strokeStyle = '#fff';
-      ctx.beginPath(); ctx.arc(sx, sy, HR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // identity — screen pixels
+  ctx.lineWidth = 1.5;
+
+  for (const el of els) {
+    for (const h of getHandles(el)) {
+      // Convert world coord → screen coord
+      const sx = h.cx * viewZoom + viewOX;
+      const sy = h.cy * viewZoom + viewOY;
+
+      if (h.type === 'resize') {
+        // Blue square
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#3B82F6';
+        ctx.beginPath();
+        ctx.rect(sx - HR, sy - HR, HR * 2, HR * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Green circle (rotate)
+        ctx.fillStyle = '#10B981';
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, HR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
   }
   ctx.restore();
 }
+
 
 function dimLabel(x1,y1,x2,y2,off=-9) {
   const ft=(Math.hypot(x2-x1,y2-y1)/PX_PER_FT).toFixed(1);
@@ -688,7 +714,6 @@ function drawRoof(el, sel) {
 
   ctx.restore(); // back to unrotated world space
   ctx.globalAlpha=1;
-  if(sel) drawHandles(el); // handles drawn in world space (they're already at correct positions)
 }
 
 function drawMember(el, sel) {
@@ -712,7 +737,6 @@ function drawMember(el, sel) {
       ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(el.sectionW+'x'+el.sectionH,el.x1,el.y1);
     }
-    if(sel) drawHandles(el);
   } else {
     // Highlight first-selected post for brace tool
     if(el===braceFirstEl){
@@ -739,7 +763,6 @@ function drawMember(el, sel) {
       ctx.fillText(lbl+' '+el.sectionW+'x'+el.sectionH+'"',0,-3);
       ctx.restore();
     }
-    if(sel) drawHandles(el);
   }
   ctx.restore();
 }
@@ -788,7 +811,6 @@ function drawZone(el, sel){
     ctx.fillText(areaSqFt.toFixed(1)+' ft²',cx2,cy2);
   }
   ctx.textAlign='left';
-  if(sel) drawHandles(el);
   ctx.restore();
 }
 
@@ -842,7 +864,6 @@ function drawWall(el, sel) {
   }
   if (alpha > 0.5) dimLabel(el.x1,el.y1,el.x2,el.y2);
   ctx.globalAlpha=1;
-  if (sel) drawHandles(el);
 }
 
 function drawRoom(el, sel) {
@@ -885,7 +906,6 @@ function drawRoom(el, sel) {
   ctx.fillText(`${((el.w/PX_PER_FT)*(el.h/PX_PER_FT)).toFixed(1)} ft²`,cx,cy+yo+13);
   if(isUpper){ctx.font='10px -apple-system,sans-serif';ctx.fillStyle=dark?'rgba(147,197,253,0.7)':'rgba(59,130,246,0.6)';ctx.fillText('Upper',cx,cy+yo+25);}
   ctx.textAlign='left'; ctx.globalAlpha=1;
-  if(sel) drawHandles(el);
 }
 
 function drawWindow(el, sel) {
@@ -942,7 +962,6 @@ function drawWindow(el, sel) {
     [-len/2,0,len/2].forEach(x=>{ctx.beginPath();ctx.moveTo(x,-5);ctx.lineTo(x,5);ctx.stroke();});
   }
   ctx.restore(); ctx.globalAlpha=1;
-  if (sel) drawHandles(el);
 }
 
 function drawDoor(el, sel) {
@@ -1001,7 +1020,6 @@ function drawDoor(el, sel) {
     ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,len,0,Math.PI/2); ctx.closePath(); ctx.fill();
   }
   ctx.restore(); ctx.globalAlpha=1;
-  if (sel) drawHandles(el);
 }
 
 const FDEFS={
@@ -1347,7 +1365,6 @@ function drawFurniture(el, sel) {
   const label=FDEFS[t]?.label||t;
   ctx.fillText(label,0,ph/2+11);
   ctx.restore(); ctx.globalAlpha=1;
-  if (sel) drawHandles(el);
 }
 
 // ══════════════════════════════════════════════════
@@ -1472,6 +1489,8 @@ function render2d() {
   }
   } catch(err) { console.error("render2d error:", err); }
   ctx.restore();
+  // Draw handles AFTER restore — always on top, always in screen space
+  drawAllHandles();
 }
 
 // ══════════════════════════════════════════════════
