@@ -451,7 +451,7 @@ function getHandles(el) {
     [{role:'nw',cx:x,cy:y},{role:'n',cx:x+w/2,cy:y},{role:'ne',cx:x+w,cy:y},
      {role:'e',cx:x+w,cy:y+h/2},{role:'se',cx:x+w,cy:y+h},{role:'s',cx:x+w/2,cy:y+h},
      {role:'sw',cx:x,cy:y+h},{role:'w',cx:x,cy:y+h/2}].forEach(p=>handles.push({type:'resize',...p}));
-    handles.push({type:'rotate',role:'rot',cx:x+w+ROT_DIST*0.7,cy:y-ROT_DIST*0.7});
+    // No rotate handle — rooms/roofs are axis-aligned
   } else if (el.type === 'wall') {
     handles.push({type:'resize',role:'p1',cx:el.x1,cy:el.y1});
     handles.push({type:'resize',role:'p2',cx:el.x2,cy:el.y2});
@@ -489,8 +489,10 @@ function getHandles(el) {
 }
 
 function hitHandle(el, mx, my) {
+  // Scale hit radius so handles stay clickable at any zoom level
+  const hitR = (HR + 4) / viewZoom;
   for (const h of getHandles(el)) {
-    if (Math.hypot(mx-h.cx, my-h.cy) <= HR+3) return h;
+    if (Math.hypot(mx-h.cx, my-h.cy) <= hitR) return h;
   }
   return null;
 }
@@ -502,10 +504,11 @@ function applyResize(el, role, mx, my, origin, mouseStart) {
   const dx=mx-mouseStart.x, dy=my-mouseStart.y;
   if (el.type==='room'||el.type==='roof') {
     let {x,y,w,h}=origin;
-    if(role==='nw'||role==='w'||role==='sw'){const nx=snap(origin.x+dx);w=Math.max(SNAP(),snap(origin.w-(nx-origin.x)));x=origin.x+origin.w-w;}
-    if(role==='ne'||role==='e'||role==='se'){w=Math.max(SNAP(),snap(origin.w+dx));}
-    if(role==='nw'||role==='n'||role==='ne'){const ny=snap(origin.y+dy);h=Math.max(SNAP(),snap(origin.h-(ny-origin.y)));y=origin.y+origin.h-h;}
-    if(role==='sw'||role==='s'||role==='se'){h=Math.max(SNAP(),snap(origin.h+dy));}
+    // Snap the edge position (not the delta) for consistent grid alignment
+    if(role==='nw'||role==='w'||role==='sw'){const nx=snap(origin.x+dx); x=nx; w=Math.max(SNAP(),origin.x+origin.w-nx);}
+    if(role==='ne'||role==='e'||role==='se'){w=Math.max(SNAP(),snap(origin.x+origin.w+dx)-origin.x);}
+    if(role==='nw'||role==='n'||role==='ne'){const ny=snap(origin.y+dy); y=ny; h=Math.max(SNAP(),origin.y+origin.h-ny);}
+    if(role==='sw'||role==='s'||role==='se'){h=Math.max(SNAP(),snap(origin.y+origin.h+dy)-origin.y);}
     el.x=x;el.y=y;el.w=w;el.h=h;
   } else if (el.type==='wall') {
     if(role==='p1'){const gs=geometricSnap(snap(origin.x1+dx),snap(origin.y1+dy),el);el.x1=gs.x;el.y1=gs.y;}
@@ -520,11 +523,14 @@ function applyResize(el, role, mx, my, origin, mouseStart) {
     const ang=origin.angle||0;
     const ldx=dx*Math.cos(ang)+dy*Math.sin(ang), ldy=-dx*Math.sin(ang)+dy*Math.cos(ang);
     let {fw,fh}=origin;
-    if(role==='e'||role==='ne'||role==='se')  fw=Math.max(0.5,snap(origin.fw*PX_PER_FT+ldx)/PX_PER_FT);
-    if(role==='w'||role==='nw'||role==='sw')  fw=Math.max(0.5,snap(origin.fw*PX_PER_FT-ldx)/PX_PER_FT);
-    if(role==='s'||role==='se'||role==='sw')  fh=Math.max(0.5,snap(origin.fh*PX_PER_FT+ldy)/PX_PER_FT);
-    if(role==='n'||role==='ne'||role==='nw')  fh=Math.max(0.5,snap(origin.fh*PX_PER_FT-ldy)/PX_PER_FT);
-    el.fw=fw;el.fh=fh;
+    const cos=Math.cos(ang), sin=Math.sin(ang);
+    // Accumulate center shifts — prevents corner handles from double-writing el.x/y
+    let shiftX=0, shiftY=0;
+    if(role==='e'||role==='ne'||role==='se'){ fw=Math.max(0.5,snap(origin.fw*PX_PER_FT+ldx)/PX_PER_FT); }
+    if(role==='w'||role==='nw'||role==='sw'){ const nfw=Math.max(0.5,snap(origin.fw*PX_PER_FT-ldx)/PX_PER_FT); const dfw=nfw-origin.fw; fw=nfw; shiftX-=dfw*PX_PER_FT/2*cos; shiftY-=dfw*PX_PER_FT/2*sin; }
+    if(role==='s'||role==='se'||role==='sw'){ fh=Math.max(0.5,snap(origin.fh*PX_PER_FT+ldy)/PX_PER_FT); }
+    if(role==='n'||role==='ne'||role==='nw'){ const nfh=Math.max(0.5,snap(origin.fh*PX_PER_FT-ldy)/PX_PER_FT); const dfh=nfh-origin.fh; fh=nfh; shiftX+=dfh*PX_PER_FT/2*sin; shiftY-=dfh*PX_PER_FT/2*cos; }
+    el.fw=fw; el.fh=fh; el.x=origin.x+shiftX; el.y=origin.y+shiftY;
   } else if (el.type==='window'||el.type==='door') {
     const ang=origin.angle||0, len=origin.len||PX_PER_FT*4;
     const cos=Math.cos(ang), sin=Math.sin(ang);
@@ -558,8 +564,8 @@ function applyRotate(el, mx, my, origin) {
     el.x2=snap(cx+Math.cos(angle)*len/2); el.y2=snap(cy+Math.sin(angle)*len/2);
   } else if(el.type==='member'&&el.role==='post'){
     el.angle=angle;
-  } else if(el.type!=='room'&&el.type!=='roof') {
-    el.angle=angle;
+  } else {
+    el.angle=angle; // furniture, door, window
   }
 }
 
@@ -582,15 +588,22 @@ function drawGrid() {
 // DRAW HANDLES
 // ══════════════════════════════════════════════════
 function drawHandles(el) {
+  // Draw handles in screen space so they're always the same size regardless of zoom
+  ctx.save();
+  ctx.resetTransform();
   for (const h of getHandles(el)) {
-    if (h.type==='resize') {
-      ctx.fillStyle='#fff'; ctx.strokeStyle='#3B82F6'; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.rect(h.cx-HR,h.cy-HR,HR*2,HR*2); ctx.fill(); ctx.stroke();
+    const sx = h.cx * viewZoom + viewOX;
+    const sy = h.cy * viewZoom + viewOY;
+    ctx.lineWidth = 1.5;
+    if (h.type === 'resize') {
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3B82F6';
+      ctx.beginPath(); ctx.rect(sx-HR, sy-HR, HR*2, HR*2); ctx.fill(); ctx.stroke();
     } else {
-      ctx.fillStyle='#10B981'; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.arc(h.cx,h.cy,HR,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#10B981'; ctx.strokeStyle = '#fff';
+      ctx.beginPath(); ctx.arc(sx, sy, HR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     }
   }
+  ctx.restore();
 }
 
 function dimLabel(x1,y1,x2,y2,off=-9) {
