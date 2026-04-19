@@ -55,6 +55,15 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 .area-row .room-name { color:var(--text2); }
 .area-row .room-sqft { font-weight:500; }
 .area-total { display:flex; justify-content:space-between; padding:5px 0 1px; font-size:12px; font-weight:500; border-top:0.5px solid var(--border2); margin-top:2px; }
+.area-group { margin-bottom:1px; }
+.area-group-header { display:flex; justify-content:space-between; align-items:center; cursor:pointer; padding:4px 2px 3px; border-bottom:0.5px solid var(--border); user-select:none; gap:4px; }
+.area-group-header:hover .area-group-title { color:var(--text2); }
+.area-group-title { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; display:flex; align-items:center; gap:5px; flex:1; min-width:0; }
+.area-group-chevron { font-size:8px; flex-shrink:0; transition:transform 0.15s ease; display:inline-block; line-height:1; color:var(--text3); }
+.area-group-chevron.open { transform:rotate(90deg); }
+.area-group-subtotal { font-size:11px; color:var(--text2); font-weight:500; white-space:nowrap; flex-shrink:0; }
+.area-group-body { }
+.area-group-body.collapsed { display:none; }
 #work-area { flex:1; display:flex; overflow:hidden; }
 #canvas-wrap { flex:1; position:relative; overflow:hidden; min-width:0; }
 #fp { display:block; width:100%; height:100%; }
@@ -113,6 +122,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">Draw:</span>
   <button class="layer-btn active" data-layer="0" title="Draw on ground floor">G</button>
   <button class="layer-btn" data-layer="1" title="Draw on upper floor">U</button>
+  <button class="layer-btn" data-layer="2" title="Draw on lower/basement level">L</button>
   <button class="layer-btn" data-layer="roof" title="Place roofs">R</button>
   <button class="layer-btn" data-layer="frame" title="Place timber frame members">F</button>
   <button class="layer-btn" data-layer="outdoor" title="Place outdoor elements">O</button>
@@ -120,6 +130,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
   <span style="font-size:9px;color:var(--text3);white-space:nowrap;flex-shrink:0">Show:</span>
   <button class="vis-btn active" data-vis="0" title="Toggle ground floor visibility">G</button>
   <button class="vis-btn active" data-vis="1" title="Toggle upper floor visibility">U</button>
+  <button class="vis-btn active" data-vis="2" title="Toggle lower/basement visibility">L</button>
   <button class="vis-btn active" data-vis="roof" title="Toggle roof visibility">R</button>
   <button class="vis-btn active" data-vis="frame" title="Toggle timber frame visibility">F</button>
   <button class="vis-btn active" data-vis="outdoor" title="Toggle outdoor elements visibility">O</button>
@@ -237,7 +248,7 @@ let undoStack = [];
 // ── Layer / visibility system (shared 2D + 3D) ─────────────────────────────
 let currentLayer  = 0;          // active drawing layer: 0, 1, or 'roof'
 let currentFloor  = 0;          // floor for non-roof placement (0 or 1)
-const layerVisible = {0:true, 1:true, roof:true, frame:true, outdoor:true};
+const layerVisible = {0:true, 1:true, 2:true, roof:true, frame:true, outdoor:true};
 
 // Default followTerrain per element type/subtype
 function defaultFollowTerrain(el) {
@@ -257,11 +268,11 @@ function getFollowTerrain(el) {
 }
 
 // Parse a data-layer or data-vis attribute value to the correct key type
-const layerKey = v => (v==='roof'||v==='frame'||v==='outdoor') ? v : +v;
+const layerKey = v => (v==='roof'||v==='frame'||v==='outdoor') ? v : +v; // 0=ground,1=upper,2=lower
 
 function setLayer(layer) {
   currentLayer = layer;
-  currentFloor = (layer === 'roof' || layer === 'frame' || layer === 'outdoor') ? 0 : +layer;
+  currentFloor = (layer === 'roof' || layer === 'frame' || layer === 'outdoor') ? 0 : +layer; // supports 0,1,2
   document.querySelectorAll('.layer-btn').forEach(b => {
     b.classList.toggle('active', layerKey(b.dataset.layer) === layer);
   });
@@ -1877,25 +1888,93 @@ canvas2d.addEventListener('dblclick', e => {
 // ══════════════════════════════════════════════════
 // AREA CALCULATIONS
 // ══════════════════════════════════════════════════
+// Collapsed state for area sections — persists across re-renders
+const _areaCollapsed = { ground: false, upper: false, lower: false };
+
 function updateAreas() {
-  const rooms=elements.filter(e=>e.type==='room');
-  const zones=elements.filter(e=>e.type==='zone');
-  const allItems=[...rooms,...zones];
-  const _totalEl=document.getElementById('total-area');
-  if(_totalEl) _totalEl.textContent=(rooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)).toFixed(1);
-  const list=document.getElementById('area-list');
-  if(!allItems.length){list.innerHTML='<span style="color:var(--text3)">No rooms or zones yet</span>';return;}
-  const gRooms=rooms.filter(r=>(r.floor||0)===0), uRooms=rooms.filter(r=>(r.floor||0)===1);
-  const gZones=zones.filter(z=>(z.floor||0)===0), uZones=zones.filter(z=>(z.floor||0)===1);
-  const gTotal=gRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)+gZones.reduce((s,z)=>s+polyAreaPx(z.pts||[])/(PX_PER_FT*PX_PER_FT),0);
-  const uTotal=uRooms.reduce((s,r)=>s+(r.w/PX_PER_FT)*(r.h/PX_PER_FT),0)+uZones.reduce((s,z)=>s+polyAreaPx(z.pts||[])/(PX_PER_FT*PX_PER_FT),0);
-  let html='';
-  const roomRow=r=>`<div class="area-row"><span class="room-name">${r.label||'Unlabeled'}</span><span class="room-sqft">${((r.w/PX_PER_FT)*(r.h/PX_PER_FT)).toFixed(1)} ft²</span></div>`;
-  const zoneRow=z=>`<div class="area-row"><span class="room-name" style="color:#06b6d4">${z.label||'Zone'}</span><span class="room-sqft">${(polyAreaPx(z.pts||[])/(PX_PER_FT*PX_PER_FT)).toFixed(1)} ft²</span></div>`;
-  if(gRooms.length||gZones.length){html+=`<div style="font-size:10px;font-weight:500;color:var(--text3);margin:3px 0 2px;text-transform:uppercase;letter-spacing:.06em">Ground</div>`;html+=gRooms.map(roomRow).join('');html+=gZones.map(zoneRow).join('');}
-  if(uRooms.length||uZones.length){html+=`<div style="font-size:10px;font-weight:500;color:var(--text3);margin:5px 0 2px;text-transform:uppercase;letter-spacing:.06em">Upper</div>`;html+=uRooms.map(roomRow).join('');html+=uZones.map(zoneRow).join('');}
-  if(allItems.length>1) html+=`<div class="area-total"><span>Total</span><span>${(gTotal+uTotal).toFixed(1)} ft²</span></div>`;
-  list.innerHTML=html;
+  const list = document.getElementById('area-list');
+  if (!list) return;
+
+  const rooms = elements.filter(e => e.type === 'room');
+  const zones  = elements.filter(e => e.type === 'zone');
+
+  if (!rooms.length && !zones.length) {
+    list.innerHTML = '<span style="color:var(--text3);font-size:12px">No rooms or zones yet</span>';
+    return;
+  }
+
+  // Area helpers
+  const roomArea = r => (r.w / PX_PER_FT) * (r.h / PX_PER_FT);
+  const zoneArea = z => polyAreaPx(z.pts || []) / (PX_PER_FT * PX_PER_FT);
+
+  // Group rooms and zones by floor number
+  const group = fl => ({
+    rooms: rooms.filter(r => (r.floor || 0) === fl),
+    zones: zones.filter(z => (z.floor || 0) === fl),
+  });
+  const g = group(0), u = group(1), l = group(2);
+
+  const sectionTotal = ({ rooms: rs, zones: zs }) =>
+    rs.reduce((s, r) => s + roomArea(r), 0) +
+    zs.reduce((s, z) => s + zoneArea(z), 0);
+
+  const gTotal = sectionTotal(g);
+  const uTotal = sectionTotal(u);
+  const lTotal = sectionTotal(l);
+  const grandTotal = gTotal + uTotal + lTotal;
+
+  // Row builders
+  const roomRow = r =>
+    `<div class="area-row">` +
+    `<span class="room-name">${r.label || 'Unlabeled'}</span>` +
+    `<span class="room-sqft">${roomArea(r).toFixed(1)} ft²</span>` +
+    `</div>`;
+
+  const zoneRow = z =>
+    `<div class="area-row">` +
+    `<span class="room-name" style="color:#06b6d4">${z.label || 'Zone'}</span>` +
+    `<span class="room-sqft">${zoneArea(z).toFixed(1)} ft²</span>` +
+    `</div>`;
+
+  // Build one collapsible section; returns '' if the section is empty
+  const buildSection = (key, label, { rooms: rs, zones: zs }, total) => {
+    if (!rs.length && !zs.length) return '';
+    const isOpen = !_areaCollapsed[key];
+    const rows   = [...rs.map(roomRow), ...zs.map(zoneRow)].join('');
+    return (
+      `<div class="area-group">` +
+        `<div class="area-group-header" data-key="${key}">` +
+          `<span class="area-group-title">` +
+            `<span class="area-group-chevron${isOpen ? ' open' : ''}">&#9658;</span>` +
+            label +
+          `</span>` +
+          `<span class="area-group-subtotal">${total.toFixed(1)} ft²</span>` +
+        `</div>` +
+        `<div class="area-group-body${isOpen ? '' : ' collapsed'}">${rows}</div>` +
+      `</div>`
+    );
+  };
+
+  const activeSections = [g, u, l].filter(s => s.rooms.length || s.zones.length).length;
+
+  let html = '';
+  html += buildSection('ground', 'Ground',       g, gTotal);
+  html += buildSection('upper',  'Upper',         u, uTotal);
+  html += buildSection('lower',  'Gym / Storage', l, lTotal);
+  if (activeSections > 1) {
+    html += `<div class="area-total"><span>Total</span><span>${grandTotal.toFixed(1)} ft²</span></div>`;
+  }
+
+  list.innerHTML = html;
+
+  // Attach toggle listeners directly after setting innerHTML
+  list.querySelectorAll('.area-group-header').forEach(hdr => {
+    hdr.addEventListener('click', () => {
+      const k = hdr.dataset.key;
+      _areaCollapsed[k] = !_areaCollapsed[k];
+      updateAreas();
+    });
+  });
 }
 
 // ══════════════════════════════════════════════════
@@ -1947,7 +2026,7 @@ function updateProps() {
     html+=row('Area',val(`${areaSqFt} ft²`));
     html+=row('Label',inp('pe-label','text',el.label||'','placeholder="Zone name"'));
     html+=row('Vertices',val(`${(el.pts||[]).length} pts`));
-    html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
+    html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper'],[2,'Gym/Storage']],el.floor||0));
   }
   else if(el.type==='zone'){
     html+=row('Label',inp('pe-label','text',el.label||'','placeholder="Zone name"'));
@@ -1960,7 +2039,7 @@ function updateProps() {
     const za=(polyAreaPx(el.pts||[])/(PX_PER_FT*PX_PER_FT)).toFixed(1);
     html+=row('Area',val(za+' ft²'));
     html+=row('Vertices',val((el.pts||[]).length+''));
-    html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
+    html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper'],[2,'Gym/Storage']],el.floor||0));
   }
   else if(el.type==='wall'){html+=row('Type',val(el.landscape?'Landscape wall':el.half?'Half-wall':'Wall'));html+=row('Length',val(`${(Math.hypot(el.x2-el.x1,el.y2-el.y1)/PX_PER_FT).toFixed(2)} ft`));html+=row('Thickness',inp('pe-thick','number',el.thickness||8,'min="2" max="40"'));if(!el.landscape){html+=row('Height',`<select class="prop-input" id="pe-half"><option value="0"${el.half?'':' selected'}>Full height</option><option value="1"${el.half?' selected':''}>Half height</option></select>`);html+=row('Slope',`<select class="prop-input" id="pe-fixedelev"><option value="0"${el.fixedElev?'':' selected'}>Follows terrain</option><option value="1"${el.fixedElev?' selected':''}>Fixed at floor level</option></select>`);}}
   else if(el.type==='roof'){
@@ -2023,7 +2102,7 @@ function updateProps() {
         <option value="1"${curFT?' selected':''}>Terrain (slope)</option>
       </select>`);
   }
-  html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper']],el.floor||0));
+  html+=row('Floor',sel2('pe-floor',[[0,'Ground'],[1,'Upper'],[2,'Gym/Storage']],el.floor||0));
   html+=`<button class="del-btn" id="pe-del">Delete</button>`;
   pane.innerHTML=html;
   const bind=(id,fn)=>{const e2=document.getElementById(id);if(e2)e2.addEventListener('input',fn);};
